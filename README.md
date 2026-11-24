@@ -5,7 +5,7 @@
 
 # Amalthea
 
-**A custom Linux distribution that turns the TRIMUI Brick into a dedicated musical instrument.**
+**Turn your TrimUI Brick into many instruments.**
 
 Amalthea is not an app, a launcher or an overlay on the stock firmware. It **replaces the Brick's operating
 system**. The installer writes a new boot partition and a new root filesystem: Amalthea Linux, a minimal
