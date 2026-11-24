@@ -1,0 +1,28 @@
+VENDOR COMPONENTS IN THE AMALTHEA LINUX IMAGES
+==============================================
+
+Amalthea Linux is a new userspace (BusyBox init, boot manager, recovery, the
+Amalthea appliance) assembled from an empty directory. To drive the TRIMUI
+Brick's hardware it keeps a small, individually listed set of files taken from
+TRIMUI's stock firmware 1.0.6 (TG3040, December 2024). They are redistributed
+unmodified (debug sections stripped), only so that the device works; all rights
+remain with their owners.
+
+Boot image (amalthea-boot.img)
+  - Linux 4.9.191 kernel binary from the stock boot partition (Allwinner A133 BSP,
+    build #804), byte-for-byte unchanged. Linux is GPL-2.0.
+  - A new initramfs (Amalthea boot manager and RAM installer/recovery, GPL-3.0).
+
+Root image (amalthea-rootfs.img)
+  - Kernel modules for the GPU/display fallback (pvrsrvkm.ko, dc_sunxi.ko) and
+    the GPU firmware files rgx.fw/rgx.sh.22.102.54.38 (not loaded in normal use).
+  - Board helpers: inputd (virtual gamepad), keymon (power/volume keys),
+    hardware (board settings), libshmvar.so, and the vendor adbd (USB recovery).
+  - Runtime libraries: glibc 2.33 (LGPL-2.1), libstdc++/libgcc_s (GPL-3.0 with
+    the GCC runtime exception), alsa-lib (LGPL-2.1), tinyalsa/tinymix (BSD).
+
+Everything else, including BusyBox 1.37.0 (GPL-2.0, built from source) and the
+Amalthea appliance (GPL-3.0), is built from the sources in
+https://github.com/nzimas/amalthea (system/ and app/). The installer never
+writes the bootloader, partition table, or any partition other than boot (p4)
+and rootfs (p5).

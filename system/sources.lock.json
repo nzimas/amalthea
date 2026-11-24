@@ -1,0 +1,13 @@
+{
+  "busybox": {
+    "version": "1.37.0",
+    "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
+    "sha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4"
+  },
+  "board": "TRIMUI Brick TG3040",
+  "appliance_git_commit": "aa16312",
+  "backup_directory": "../trimui-tracker-linux/backups/2026-11-20",
+  "original_boot_raw_sha256": "306c04bfa6f2e21c606f255a5626032bb0e9c52f39d2beb42bdfb90a0e80a79f",
+  "original_root_raw_sha256": "ceb1ec233f9cfd30b0b686142a6ee9c30a20386b6f9fe45680f17956bff74952",
+  "retained_kernel_sha256": "68eba260a6a959ebe8c2335a353dd2492368a47a6a3b42c0ad1b851426f85701"
+}

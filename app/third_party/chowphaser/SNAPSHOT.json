@@ -1,0 +1,17 @@
+{
+  "source": "https://github.com/jatinchowdhury18/ChowPhaser/tree/31eac4df747e9a778a6efe53d461f526343cb61d/src",
+  "source_commit": "31eac4df747e9a778a6efe53d461f526343cb61d",
+  "license": "BSD-3-Clause; see LICENSE. *.orig are the unmodified upstream files.",
+  "adaptations": "ChowPhaserCore.h: no JUCE; sine LFO and 50 ms linear smoothing reimplemented; std::tan/std::sin instead of JUCE fast approximations; one parameter set drives a stereo pair with the right LFO offset by STEREO. LDR light/resistance model, tanh feedback section, fractional all-pass stages and modulation blend unchanged.",
+  "files": {
+    "ChowPhaserCore.h": "c9b1d786045bc4231be90c75ef085a6a3ed44fb2ff11af1fcfde6ae24da7ee16",
+    "ChowPhaserStereo.cpp.orig": "b7e57b6ae240064ab8f267c4df003bf5f779d00c243dfc8c947a55ebe478f0d7",
+    "FBSection.h.orig": "c9276f5374d9b5743cbae8d37e6403fc43612879c1961c94f968d9b4ebdd9183",
+    "IIRFilter.h.orig": "0a6babba46c1d5d8e71aa38768770eb704e9870d5530050af32500f1986c19f8",
+    "LICENSE": "6d9ac317a4deca634d0a6112002768c6c2a4c6a09fcb5058f1a5718b5570dedb",
+    "PhaseSection.h.orig": "6cbb59aa11ce21c7e160189bd50c1d73bd8b5b1f14993632cb26f4d89beffd26",
+    "SingleChannelPhaser.cpp.orig": "c896861f1edf01fedbaf988f15c78aea7f616c59ef9369e26c5da59535f0f937",
+    "SingleChannelPhaser.h.orig": "8c850fb0919e4fc3085fc380d93ae67a613ac8a28cc1ff27217559763f8d9122",
+    "TanhIIRFilter.h.orig": "c7116f0f882ac40187d50f52a4b5cfa6b0bc90a5d26f29aa733171ae4aaa8d61"
+  }
+}

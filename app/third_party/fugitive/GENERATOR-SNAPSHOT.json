@@ -1,0 +1,14 @@
+{
+  "gen.c": {
+    "source": "../fugitive/firmware/src/gen.c",
+    "source_sha256": "461f8d6c2d8b5b6e59ecda38e4734c48b454c051ab70337808fbe6818ec34b3e",
+    "snapshot_sha256": "dd28541af6dfb21f99038e77492c9484d104d8fb755ea906a15bc106f345923d",
+    "change": "omit trailing unrelated gen_role_sound"
+  },
+  "gen_perc.c": {
+    "source": "../fugitive/firmware/src/gen_perc.c",
+    "source_sha256": "428d74645c2b3cb6bb180d3a0a07d829675fe15706d74ad27a54e90dca665624",
+    "snapshot_sha256": "428d74645c2b3cb6bb180d3a0a07d829675fe15706d74ad27a54e90dca665624",
+    "change": "unchanged"
+  }
+}

@@ -1,0 +1,60 @@
+#!/bin/sh
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export LD_LIBRARY_PATH=/lib
+export ALSA_CONFIG_PATH=/etc/alsa/alsa.conf
+mountpoint -q /proc || mount -t proc proc /proc
+mountpoint -q /sys || mount -t sysfs sysfs /sys
+mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
+mountpoint -q /tmp || mount -t tmpfs -o mode=1777,size=128m tmpfs /tmp
+mountpoint -q /run || mount -t tmpfs -o mode=0755,size=16m tmpfs /run
+mkdir -p /dev/pts /dev/shm /sys/kernel/config /sys/kernel/debug
+mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=16m tmpfs /dev/shm
+mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+mount -t debugfs none /sys/kernel/debug
+hostname amalthea
+mkdir -p /dev/by-name
+for pair in boot:mmcblk0p4 rootfs:mmcblk0p5 rootfs_data:mmcblk0p6 UDISK:mmcblk0p10; do
+ name=${pair%:*};device=${pair#*:}
+ ln -sf "/dev/$device" "/dev/by-name/$name"
+done
+# Internal storage is mounted and checked before any appliance is started.
+if ! mountpoint -q /mnt/UDISK; then
+ mount -t ext4 -o rw,noatime /dev/mmcblk0p10 /mnt/UDISK || {
+  echo 'Internal data unavailable: recovery only' > /run/amalthea-error
+  /sbin/amalthea-usb-recovery
+  exit 1
+ }
+fi
+touch /tmp/stay_awake
+mkdir -p /tmp/system /tmp/trimui_inputd /mnt/UDISK/tracker-linux
+# Board GPIOs: peripheral 5V, motor off, side switch input.
+for pin in 107 227 243; do
+ test -d "/sys/class/gpio/gpio$pin" || echo "$pin" > /sys/class/gpio/export
+done
+echo out > /sys/class/gpio/gpio107/direction
+echo 1 > /sys/class/gpio/gpio107/value
+echo out > /sys/class/gpio/gpio227/direction
+echo 0 > /sys/class/gpio/gpio227/value
+echo in > /sys/class/gpio/gpio243/direction
+if test ! -e /dev/fb0; then
+ for module in pvrsrvkm dc_sunxi; do
+  grep -q "^$module " /proc/modules || insmod "/lib/modules/4.9.191/$module.ko"
+ done
+fi
+/sbin/amalthea-usb-startup || { echo 'USB recovery failed' > /run/amalthea-error;exit 1; }
+for pair in inputd:inputd keymon:keymon hardware:hardware; do
+ name=${pair%:*};file=${pair#*:}
+ /usr/libexec/amalthea/"$file" > /run/"$name".log 2>&1 &
+done
+# Input bridge creates the virtual gamepad; do not race it at boot.
+left=100
+while test ! -e /dev/input/event3 && test "$left" -gt 0; do
+ usleep 100000;left=$((left-1))
+done
+test -e /dev/input/event3 || { echo 'Input bridge failed' > /run/amalthea-error;exit 1; }
+# Enable DAPM output routes before starting DMA; without these the codec clock stalls.
+tinymix set 'Headphone Switch' 1
+tinymix set 'HpSpeaker Switch' 1
+tinymix set 'Headphone Volume' 0
+echo 'Amalthea Linux ready' > /run/amalthea-ready

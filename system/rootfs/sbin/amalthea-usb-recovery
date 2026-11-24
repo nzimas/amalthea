@@ -1,0 +1,40 @@
+#!/bin/sh
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export LD_LIBRARY_PATH=/lib
+G=/sys/kernel/config/usb_gadget/g1
+# A chroot smoke test must not disturb the host's working recovery connection.
+if test -r "$G/UDC" && test -n "$(cat "$G/UDC")"; then
+ exit 0
+fi
+# Explicitly select the sole external port's recovery/device role on a fresh boot.
+if test -r /sys/devices/platform/soc/usbc0/usb_device; then
+ echo 0 > /sys/devices/platform/soc/usbc0/axp_5v
+ cat /sys/devices/platform/soc/usbc0/usb_device >/dev/null
+fi
+mkdir -p /sys/kernel/config
+mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+mkdir -p "$G"
+echo 0x18d1 > "$G/idVendor"
+echo 0xd002 > "$G/idProduct"
+mkdir -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409" "$G/functions/ffs.adb"
+echo Amalthea > "$G/strings/0x409/manufacturer"
+echo 'Amalthea Linux' > "$G/strings/0x409/product"
+serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
+test -n "$serial" || serial=amalthea-tg3040
+echo "$serial" > "$G/strings/0x409/serialnumber"
+echo 0xc0 > "$G/configs/c.1/bmAttributes"
+echo 500 > "$G/configs/c.1/MaxPower"
+test -e "$G/configs/c.1/ffs.adb" || ln -s "$G/functions/ffs.adb" "$G/configs/c.1/ffs.adb"
+mkdir -p /dev/usb-ffs/adb
+mountpoint -q /dev/usb-ffs/adb || mount -t functionfs adb /dev/usb-ffs/adb
+/sbin/amalthea-adbd &
+echo $! > /tmp/amalthea-adbd.pid
+left=50
+while test ! -e /dev/usb-ffs/adb/ep1 && test "$left" -gt 0; do usleep 100000;left=$((left-1));done
+test -e /dev/usb-ffs/adb/ep1 || exit 1
+# This BSP adbd binds the UDC itself once FunctionFS endpoints are ready.
+# Do not treat its successful automatic bind as a recovery failure.
+if test -z "$(cat "$G/UDC")"; then
+ echo 5100000.udc-controller > "$G/UDC"
+fi
+test "$(cat "$G/UDC")" = 5100000.udc-controller

@@ -1,0 +1,16 @@
+{
+  "source_directory": "../mvave-fiber",
+  "source_commit": "29e5936ffc1033ad63f9e2b1943f1a405dc7e50f",
+  "note": "Working-tree snapshot; native adaptations described in docs/ENGINE-PORTS.md. Hashes identify the ported files.",
+  "files": {
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "dsp.h": "9c1b314ebbad533d866ee157930e143370556351995149c003de32a6318a6b9c",
+    "fiber.c": "91dcb9bb51931748a78d4e80fd7133a0076278b3a61579ba98ea73d6a0a43c60",
+    "fiber_gen.c": "5bfb03f2dc967902f6a639cc5f3bda82e2f96c8c790ae1f1710bc9275d089d7c",
+    "fiber_rows.h": "b43352d90ec7120866871400d57a405031a9f13898ce37ee92e8a238ad0e899f",
+    "fiber_tables.h": "d6b74163ede570e79f09e2dada2397fef875a7cf749f94c540a843e6d578b4d6",
+    "fiber_wt.c": "b1be3856aa6e69d5c2b8615a86b8f1c26b768d65e50511c23537293290ef1fe5",
+    "fiber_wtgen.h": "2eaae3b4516c87dd0d419402f3241c574c7c0e2ed2ee6367d54479a3daae43dd",
+    "fw_tables.h": "5f4ad033e97439e9ed39217ff5551d6eca4ba4a2ab8bef874a715a502ae41721"
+  }
+}

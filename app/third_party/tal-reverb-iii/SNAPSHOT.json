@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/DISTRHO/DISTRHO-Ports/tree/d3b62da2e83c69b0866af5bb2e29ac78dc8014cf/ports-juce5/tal-reverb-3/source/Engine",
+  "source_commit": "d3b62da2e83c69b0866af5bb2e29ac78dc8014cf",
+  "source_product": "Original TAL-Reverb-III (DISTRHO legacy source); not current TAL-Reverb-3 2.3 or TAL-Reverb-4",
+  "license": "Original headers specify GNU GPL Version 2; retained verbatim; see LICENSE.",
+  "adaptations": "Native wet-only stereo bus, no JUCE/plugin/UI. Allocation-free clear, corrected array deletes and TalEq destruction, unsigned random arithmetic, coefficient cache avoids redundant per-sample calculations. Original tank, EQ coloration, delays, modulation and double-scaled decay retained.",
+  "files": {
+    "AllPassFilter.h": "d70e3a32c0a303ed8a8960024b23b18e5876c20e243632f2758f29bcc4da877e",
+    "AudioUtils.h": "eb7aa019246a6beff9970f44b898640673566b2185c93191cd3ea549085f7e57",
+    "CombFilter.h": "0d5263773d33f215ae165db9eb5e80497e46853c4caf8f33b7f913dedc1ca065",
+    "HighShelf.h": "9007d9d6246436e25b0f77f3c694165b1e1a90f3dd4fefd459be466b2a41d18d",
+    "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+    "LowShelf.h": "ccf0bbea01b614933dacce5a312f6179c6f734e1b97119c037da4cb5e994cf5b",
+    "NoiseGenerator.h": "e6dc4ae4fef86ad072afdcc11ad7edf76f3c72329504efa418edb749b29ef873",
+    "Reverb.h": "cd073b8e49beead5e17c25bc2535d9c85aa78b801b330a8699ac79cc678effab",
+    "TalEq.h": "558ee4ac9666b556c085f359c44b359dcf9b408993d068b432591bda2b530608"
+  }
+}

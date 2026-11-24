@@ -1,0 +1,26 @@
+#!/bin/sh
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export LD_LIBRARY_PATH=/lib
+export ALSA_CONFIG_PATH=/etc/alsa/alsa.conf
+if test ! -f /run/amalthea-ready; then sleep 5;exit 1;fi
+# App updates are a single binary on the writable data partition, so they never
+# need a root image. The read-only /usr/bin/amalthea is the fallback: it runs when
+# no update is installed, or after an update fails to start three times in a row.
+UPDATE=/mnt/UDISK/amalthea-linux/app/amalthea
+BUILTIN=/usr/bin/amalthea
+quick=0
+while :; do
+ app=$BUILTIN
+ if test -x "$UPDATE" && test "$quick" -lt 3; then app=$UPDATE; fi
+ echo "Starting $app" >> /run/amalthea.log
+ started=$(cut -d . -f 1 /proc/uptime)
+ "$app" --project /data/amalthea/session.amalthea --brightness 10 >> /run/amalthea.log 2>&1
+ result=$?
+ ran=$(( $(cut -d . -f 1 /proc/uptime) - started ))
+ if test "$app" = "$UPDATE"; then
+  if test "$ran" -lt 10; then quick=$((quick+1)); else quick=0; fi
+  if test "$quick" -ge 3; then echo "Updated appliance failed to start 3 times; using built-in $BUILTIN until reboot" >> /run/amalthea.log; fi
+ fi
+ echo "Appliance exited $result after ${ran}s; restarting blank in 3 seconds" >> /run/amalthea.log
+ sleep 3
+done

@@ -1,0 +1,10 @@
+build/
+.DS_Store
+__pycache__/
+*.pyc
+# local strings scrubbed from synced sources (never committed)
+.private-strings
+installer/backup-*/
+installer/sessions-*/
+installer/platform-tools/
+installer/payload/

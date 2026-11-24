@@ -1,0 +1,111 @@
+<h1>Install</h1>
+<p class="lead">One command over USB. It takes about five minutes, and the first thing it does is save the stock
+  system to your computer.</p>
+
+<div class="warn">
+  <p><strong>This replaces your Brick's operating system.</strong> Amalthea is not an app or an overlay: the
+    installer overwrites the Brick's boot partition and root partition with Amalthea Linux, a custom distribution.
+    The gaming frontend, the emulators and every other stock feature will be gone until you restore the stock system.</p>
+  <p>You do this <b>at your own risk</b>. Amalthea is free software and comes with <b>no warranty of any kind</b>
+    (GNU GPL v3, sections 15 and 16). It has been developed and tested on one TRIMUI Brick (TG3040) running stock
+    firmware 1.0.6; other stock versions are untested, and the installer warns you if yours differs.
+    This project is not affiliated with or endorsed by TRIMUI.</p>
+</div>
+
+<h2 id="why-no-browser">Why there is no browser installer</h2>
+<p>My FM-1 firmwares install from a web page over USB MIDI. Amalthea replaces a whole operating system: the installer
+  has to back up about 515 MB of partitions to your computer, check them, stage new images on the Brick and drive a
+  reboot into a RAM installer. That is done more safely by a small script with full access to your files, so the
+  installer is a download you run once. It does everything on its own; you only type <code>yes</code>.</p>
+
+<h2 id="before">What you need</h2>
+<ul>
+  <li>A <b>TRIMUI Brick</b> (TG3040) on the stock firmware, charged to <b>at least 50 %</b>.</li>
+  <li>A <b>USB-C data cable</b> (a charge-only cable will not work) and a computer with <b>macOS, Linux or Windows</b>.</li>
+  <li><b>ADB</b> (Android platform-tools). If it is not installed, the installer offers to download Google's
+    platform-tools into its own folder. The stock firmware already exposes ADB over USB; nothing has to be enabled.</li>
+  <li>About <b>600 MB</b> of free space on the computer, for the stock backup.</li>
+</ul>
+
+<h2 id="install">Installing</h2>
+<ol class="steps">
+  <li>Download <b>amalthea-&lt;build&gt;-installer.zip</b> from the
+    <a href="https://github.com/nzimas/amalthea/releases/latest">latest release</a> and unzip it.</li>
+  <li>Switch the Brick on and let the stock system start. Connect it to the computer with the USB-C cable.</li>
+  <li>Run the installer:
+    <div class="os"><h3>macOS and Linux</h3>
+      <p>Open a terminal in the unzipped folder and run:</p>
+      <pre><code>./install.sh</code></pre>
+      <p class="note">On macOS you can type <code>cd </code> in Terminal, drag the folder onto the window and press
+        Return, then run the command. On Linux, if ADB reports <i>no permissions</i>, install your distribution's
+        <code>android-udev-rules</code> (or <code>android-sdk-platform-tools-common</code>) and reconnect.</p>
+    </div>
+    <div class="os"><h3>Windows</h3>
+      <p>Double-click <b>install.bat</b>. If Windows does not see the Brick, install the
+        <a href="https://developer.android.com/studio/run/win-usb">Google USB Driver</a> and reconnect.</p>
+    </div>
+  </li>
+  <li>Read the notice and type <code>yes</code>. From here on the installer works alone:
+    <ul>
+      <li>it checks the device: a TG3040, the expected partition sizes, the battery;</li>
+      <li>it copies the stock boot and root partitions to the Brick's internal storage, then to your computer, into
+        <b>backup-&lt;serial&gt;</b>, and checks them by SHA-256. <b>Keep this folder</b>: it is how you go back to stock;</li>
+      <li>it copies Amalthea to the Brick and verifies every file;</li>
+      <li>it writes the Amalthea boot partition, reads it back, and restarts the Brick;</li>
+      <li>Amalthea's boot manager writes the new root filesystem from RAM, checks it, and starts Amalthea.</li>
+    </ul>
+  </li>
+  <li>The Brick shows the Amalthea logo, then the home screen. The installer says <b>Done</b>. Read
+    <a href="manual.html">the manual</a>, open TRACKER and hold X.</li>
+</ol>
+
+<h2 id="written">What is written, and what is not</h2>
+<table>
+  <tr><th>Part of the Brick</th><th>What happens</th></tr>
+  <tr><td>Boot partition (p4, 15 MB)</td><td>Replaced: the stock kernel, unchanged, with Amalthea's boot manager</td></tr>
+  <tr><td>Root partition (p5, 500 MB)</td><td>Replaced: Amalthea Linux</td></tr>
+  <tr><td>Internal data (/mnt/UDISK)</td><td>Kept. Amalthea adds its folders and your sessions there</td></tr>
+  <tr><td>Stock settings partition</td><td>Kept, unused; back in use after a restore</td></tr>
+  <tr><td>SD card</td><td>Not mounted, not written</td></tr>
+  <tr><td>Bootloader, partition table</td><td>Never touched</td></tr>
+</table>
+<p>Each write is verified by SHA-256 before the next step. If anything fails before the boot partition is written,
+  the Brick still runs the stock system. If the root write is interrupted afterwards, the boot manager never starts
+  a half-written system: it waits in a recovery shell reachable over USB, and running the installer again finishes
+  the job.</p>
+
+<h2 id="update">Updating</h2>
+<p>Download the newer release and run its installer the same way, with Amalthea on the <b>home screen</b> (the FX
+  and LIFEBLOOD appliances use the USB port for the FM-1). Save your work on the Brick first: like every start, the
+  instruments restart blank. The installer copies your saved sessions to the computer
+  (<b>sessions-&lt;serial&gt;-&lt;date&gt;</b>) before it changes anything. When only the instruments changed, it
+  restarts them without restarting the Brick.</p>
+
+<h2 id="restore">Going back to the stock system</h2>
+<p>Connect the Brick (Amalthea on the home screen) and run, from the same installer folder:</p>
+<div class="os"><h3>macOS and Linux</h3><pre><code>./restore.sh</code></pre>
+  <p class="note">If the backup is elsewhere: <code>./restore.sh path/to/backup-folder</code></p></div>
+<div class="os"><h3>Windows</h3><p>Double-click <b>restore.bat</b> (or <code>restore.bat -Backup path\to\backup-folder</code>).</p></div>
+<p>The Brick restarts into Amalthea's RAM recovery, writes your stock root and boot partitions back, checks both and
+  restarts into the stock system, with its settings as you left them. Your Amalthea sessions stay in internal storage.</p>
+
+<h2 id="trouble">Troubleshooting</h2>
+<dl class="features">
+  <dt>No Brick found</dt><dd>Use a data cable and another port; on Windows install the Google USB Driver; on Linux
+    the udev rules above. Under Amalthea, stay on the home screen.</dd>
+  <dt>Battery below 50 %</dt><dd>Charge it and run the installer again; nothing has been changed.</dd>
+  <dt>Untested stock firmware</dt><dd>The installer names your stock version and asks before going on. Amalthea brings
+    its own kernel, but only 1.0.6 has been tested.</dd>
+  <dt>Stopped in recovery</dt><dd>The installer prints the reason. Run it again to retry, or run the restore
+    script. Nothing on internal storage is lost.</dd>
+  <dt>Lost the backup folder</dt><dd>A copy also stays on the Brick, in <code>/mnt/UDISK/amalthea-stock-backup</code>;
+    the restore script uses it when the folder is missing.</dd>
+</dl>
+<p>Problems, questions: <a href="https://github.com/nzimas/amalthea/issues">GitHub issues</a>. Please include the
+  installer's output.</p>
+
+<h2 id="source">Building it yourself</h2>
+<p>Everything except the retained vendor files is built from the
+  <a href="https://github.com/nzimas/amalthea">source</a>: the appliance in <code>app/</code>, Amalthea Linux in
+  <code>system/</code>, the installer in <code>installer/</code>. The vendor files kept in the images are listed in
+  <a href="https://github.com/nzimas/amalthea/blob/main/installer/VENDOR-COMPONENTS.txt">VENDOR-COMPONENTS.txt</a>.</p>

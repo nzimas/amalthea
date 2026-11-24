@@ -1,0 +1,21 @@
+{
+  "../fugitive/firmware/src/eng_wtfm.c": "9dfe9079d072c9f82492acbad081396b7bf842548f1aa7485600e04ad804d240",
+  "../fugitive/firmware/src/eng_chip.c": "e55d090af75ba97b63cea85700e3a430f3121bb98f674f295c0afae917e93ad2",
+  "../fugitive/firmware/src/eng_acd.c": "8ece5944e666cd9bd2d02b0698caa629456d5c781604d53f5554c1af818e652b",
+  "../fugitive/firmware/src/eng_perc.c": "5ca166dc80011fc9cbdbd21717fe4b99ec8529cc3668f7ea0de53f18fab3b987",
+  "../fugitive/firmware/src/eng_fat.c": "8c2b038f94adb5e45557eecb3a9cc2f87314a79857e1f99a71eaa5cd56291330",
+  "../fugitive/firmware/src/eng_vap.c": "35dcfe7037708422a4e7f056b01ac91ee4a3f0317a640855c353bcadf2f86c96",
+  "../fugitive/firmware/src/eng_dirt.c": "69c976d8023cbb42bd077aef2784c2154fcc446871847622c54822de24bd5f78",
+  "../fugitive/firmware/src/eng_chip_tab.h": "6eb17c77b7086f4849e5b83a80a2fb0a73d4d1cb7359c5da9d33e03d09783a17",
+  "../fugitive/firmware/src/eng_vap_tab.h": "ece91cc13b9835b6f84ab2ef54cb2b9dde1aaaa568a17aa34853430f77c1a538",
+  "../fugitive/firmware/src/eng_acd_tab.h": "524ed3d1a162b44737a4447a82852d5c8549f62a70e6fdafc25d69f83d947d32",
+  "../fugitive/firmware/src/eng_wtfm_tab.h": "248b78f875e02ae4e69c34614056769e7be95e66224fef8d4a86a4c0dd80e87e",
+  "../fugitive/firmware/src/eng_fat_tab.h": "4f3ee2ad078528e9809967b253c348c42967fa2e9b018f4732f0625c8d37b8d9",
+  "../fugitive/firmware/src/eng_dirt_tab.h": "698b288521e7212975b7e22ce77315afb1a6ec50562f1d919fa51edef5dbe561",
+  "../fugitive/firmware/src/eng_perc_tab.h": "4827120cea4c331d784515b68c0d6f0e04d9733d8ba209bbc70eaa68249b3559",
+  "../fugitive/firmware/src/eng.h": "2a9ef812c4e777b4b26cef0ba1623d499e51d9b8b6a8aacbdc4219d56ad7448b",
+  "../fugitive/firmware/src/dsp.h": "6e2eb08a48e594b4186c8c2507716da52bab429f8814abcf074c25c57ac19a78",
+  "../fugitive/build/gen/fw_tables.h": "5f4ad033e97439e9ed39217ff5551d6eca4ba4a2ab8bef874a715a502ae41721",
+  "../fugitive/LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+  "../fugitive/firmware/src/fugue.c": "7ec36f4782eaca5c972e1989e81e929f64bbaa2c4987558b66945efe8ad13b52"
+}

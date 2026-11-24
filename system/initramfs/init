@@ -1,0 +1,76 @@
+#!/bin/busybox sh
+export PATH=/sbin:/bin
+export LD_LIBRARY_PATH=/lib
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+# The bootloader leaves the hardware watchdog armed; service it before slow image checks.
+if test -c /dev/watchdog; then watchdog -t 2 -T 16 /dev/watchdog; fi
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=1777,size=32m tmpfs /tmp
+mkdir -p /sys/kernel/config /mnt/UDISK /newroot
+mount -t configfs none /sys/kernel/config
+echo 'Amalthea Linux boot manager' > /dev/console
+rescue() {
+ echo "RECOVERY: $*" > /dev/console
+ echo "$*" > /tmp/amalthea-recovery-reason
+ /sbin/amalthea-usb-recovery || true
+ while :; do sleep 60;done
+}
+grep -q TG3040 /proc/cpuinfo || rescue 'Unexpected hardware'
+left=100
+while test ! -b /dev/mmcblk0p10 && test "$left" -gt 0; do usleep 100000;left=$((left-1));done
+mount -t ext4 -o rw,noatime /dev/mmcblk0p10 /mnt/UDISK || rescue 'Internal data mount failed'
+BASE=/mnt/UDISK/amalthea-linux
+mode=$(cat "$BASE/boot.mode" 2>/dev/null)
+case "$mode" in
+ trial)
+  test -r "$BASE/rootfs.img" || rescue 'Trial root image missing'
+  (cd "$BASE" && sha256sum -c rootfs.sha256) || rescue 'Trial root image checksum failed'
+  mount -t ext4 -o ro,loop "$BASE/rootfs.img" /newroot || rescue 'Trial root image mount failed'
+  ;;
+ install)
+  test -r "$BASE/rootfs.img" || rescue 'Install image missing'
+  (cd "$BASE" && sha256sum -c rootfs.sha256) || rescue 'Install image checksum failed'
+  test "$(stat -c %s "$BASE/rootfs.img")" = 524288000 || rescue 'Install image size invalid'
+  test "$(blockdev --getsize64 /dev/mmcblk0p5)" = 524288000 || rescue 'Root partition size invalid'
+  target_dev=$(cat /sys/class/block/mmcblk0p5/dev)
+  test -n "$target_dev" || rescue 'Root partition identity unavailable'
+  grep -q " $target_dev " /proc/self/mountinfo && rescue 'Refusing to write mounted root'
+  charge=$(cat /sys/class/power_supply/axp2202-battery/capacity)
+  test "$charge" -ge 30 || rescue 'Battery too low for installation'
+  # A power interruption leaves recovery selected, never a partially written root.
+  echo rescue > "$BASE/boot.mode.next"
+  sync
+  mv "$BASE/boot.mode.next" "$BASE/boot.mode"
+  sync
+  echo 'Installing verified Amalthea root from RAM' > /dev/console
+  dd if="$BASE/rootfs.img" of=/dev/mmcblk0p5 bs=1048576 || rescue 'Root write failed'
+  sync
+  expected=$(cut -d " " -f 1 "$BASE/rootfs.sha256")
+  actual=$(sha256sum /dev/mmcblk0p5 | cut -d " " -f 1)
+  test "$actual" = "$expected" || rescue 'Written root checksum failed'
+  echo "$actual" > "$BASE/installed-root.sha256"
+  echo system > "$BASE/boot.mode.next"
+  sync
+  mv "$BASE/boot.mode.next" "$BASE/boot.mode"
+  sync
+  mount -t ext4 -o ro /dev/mmcblk0p5 /newroot || rescue 'Installed root mount failed'
+  ;;
+ system)
+  mount -t ext4 -o ro /dev/mmcblk0p5 /newroot || rescue 'System root mount failed'
+  ;;
+ *) rescue 'No validated Amalthea boot mode selected' ;;
+esac
+test -f /newroot/etc/amalthea-root || rescue 'Root identity invalid'
+test -x /newroot/sbin/init || rescue 'Root init missing'
+# No stock fallback. Failures remain in the RAM recovery environment.
+echo "Amalthea root ready: $mode" > /dev/console
+mkdir -p /newroot/proc /newroot/sys /newroot/dev /newroot/tmp /newroot/mnt/UDISK
+mount --move /mnt/UDISK /newroot/mnt/UDISK || rescue 'Data mount move failed'
+mount --move /proc /newroot/proc
+mount --move /sys /newroot/sys
+mount --move /dev /newroot/dev
+mount --move /tmp /newroot/tmp
+exec switch_root /newroot /sbin/init

@@ -1,0 +1,20 @@
+--- a/include/linux/usb/composite.h
++++ b/include/linux/usb/composite.h
+@@ -584,6 +584,7 @@
+ 	struct config_group group;
+ 	struct list_head cfs_list;
+ 	struct usb_function_driver *fd;
++	struct usb_function *f;	/* TG3040 Android BSP layout */
+ 	int (*set_inst_name)(struct usb_function_instance *inst,
+ 			      const char *name);
+ 	void (*free_func_inst)(struct usb_function_instance *inst);
+--- a/include/linux/usb/gadget.h
++++ b/include/linux/usb/gadget.h
+@@ -108,6 +108,7 @@
+ 					struct usb_request *req);
+ 	void			*context;
+ 	struct list_head	list;
++	unsigned		bsp_priv;	/* TG3040 Allwinner BSP layout */
+ 
+ 	int			status;
+ 	unsigned		actual;

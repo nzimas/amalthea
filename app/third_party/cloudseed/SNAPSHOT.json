@@ -1,0 +1,25 @@
+{
+  "source": "https://github.com/GhostNoteAudio/CloudSeedCore",
+  "source_commit": "deb21ded9eb7dad9b3ff94ce1ba96a963716594e",
+  "license": "MIT",
+  "adaptations": "Native 44.1 kHz capacities, fixed seed storage, initialized state, bounded reads, polarity-safe filter cleanup, deterministic resets, interpolated modulation table and ARM NEON spans. See docs/REVERB-RESEARCH.md.",
+  "files": {
+    "DSP/AllpassDiffuser.h": "891356a20dea5517c43ee9ba9d32ba8db87b37d733f32d498b079ef01a2237fa",
+    "DSP/Biquad.cpp": "880ceb1a878daeb25dc5171b62757c77a26a54aa3eb862e291fdd1a80526758d",
+    "DSP/Biquad.h": "73e4ed3894b231e3aac03142015e06cece42f3d5975adcf3c766f2f31b0ec542",
+    "DSP/DelayLine.h": "cbd45acadd38f746b3a7ae516409e42157c23cac4fae8ade59479964c70fe357",
+    "DSP/Hp1.h": "3b23068618a702b520ef5b97cea79b2a82b6c01bf939b919dcc5a1d5560ff785",
+    "DSP/LcgRandom.h": "532a673ca9881ab1a2b52fdfb1e31286ba411400048a31231dd705ae70af6261",
+    "DSP/Lp1.h": "8b0aedaa481c8fd6b376ee0191ee16f72b247ffa7db6f0cce55fd0ec02f006d8",
+    "DSP/ModulatedAllpass.h": "7c5d685dab0ae4d14d97884a4a9706ea06c7366732e229a31a9011e60fd8f63a",
+    "DSP/ModulatedDelay.h": "c0031b7808b9bb105b993cfa6765eab101df74a64055aa1a1fe0dca12905d262",
+    "DSP/MultitapDelay.h": "40ca5b6228de1889990737e9a03db49ae89c11ec249220e86406dcfec9ce391c",
+    "DSP/RandomBuffer.cpp": "8eea2499e027de2fd22e1f35b17d5c2d66bea54c208a86a01f1f800dbe42d18b",
+    "DSP/RandomBuffer.h": "cfac5cf9c40437959b58400cec691613da582dd5f1cc9305d2a874652851e521",
+    "DSP/ReverbChannel.h": "fa5b62e8a8755ea047dfbb44acf81d0b477d434eb9eb0b543cfe3460a42e2628",
+    "DSP/ReverbController.h": "416f2ac687ee9821270f7576c41964e29e5c1fd9633e12a1815a2ab89fb059e4",
+    "DSP/Utils.h": "426e4e98636b10b98e0c0c501a26482ca11ad39922f9ed9c3ce8487e2a8cf1b0",
+    "LICENSE": "1c57cf0291ebfc28709b46c82a05a6dad4d0168b4715165279e697dd4f04dc9a",
+    "Parameters.h": "7386091ffe2b10250c70818f0b82a853b8aa18db075204c83e573f38ed96d337"
+  }
+}

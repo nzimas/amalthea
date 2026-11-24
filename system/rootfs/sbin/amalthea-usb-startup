@@ -1,0 +1,41 @@
+#!/bin/sh
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export LD_LIBRARY_PATH=/lib
+. /usr/libexec/amalthea/usb-boot-barrier.sh
+boot_id=$(cat /proc/sys/kernel/random/boot_id)
+log_dir=/mnt/UDISK/tracker-linux/logs/audio
+mkdir -p "$log_dir" || exit 1
+startup() {
+ echo "USB STARTUP boot_id=$boot_id"
+ cat /proc/uptime
+ if ! wait_usb_boot_workers /proc 150; then
+  # Preserve a diagnostic connection, but do not declare appliances ready.
+  /sbin/amalthea-usb-recovery
+  return 1
+ fi
+ echo 'USB startup barrier passed; stopping scan and normalizing controller'
+ # The retained kernel reads usb_detect_mode; this DT only supplies usb_detect_type.
+ # Its effective mode is polling. Force NULL to stop that scanner before setup.
+ controller=/sys/devices/platform/soc/usbc0
+ echo 0 > "$controller/axp_5v" || return 1
+ cat "$controller/usb_null" >/dev/null || return 1
+ role=$(cat "$controller/otg_role")
+ case "$role" in null|usb_null) ;; *) echo "Cannot neutralize USB controller: $role";return 1;; esac
+ echo 'USB neutral confirmed; initializing device controller without a gadget'
+ cat "$controller/usb_device" >/dev/null || return 1
+ test "$(cat "$controller/otg_role")" = usb_device || return 1
+ test -d /sys/class/udc/5100000.udc-controller || return 1
+ echo 'USB first device initialization complete; recreating before gadget bind'
+ cat /proc/uptime
+ /sbin/amalthea-usb-recovery || return 1
+ echo 'USB recovery/gadget initialization complete'
+ cat /proc/uptime
+ cat /sys/devices/platform/soc/usbc0/otg_role
+ cat /sys/class/udc/5100000.udc-controller/state
+ cat /sys/devices/platform/soc/usbc0/axp_5v
+ cat /sys/kernel/debug/clk/clk_summary
+}
+startup >> "$log_dir/startup-$boot_id.log" 2>&1
+result=$?
+sync
+exit "$result"

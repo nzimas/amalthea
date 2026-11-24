@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/surge-synthesizer/sst-effects/blob/987b39dcb2e2e61e6225c3bc390fd00da824d226/include/sst/effects/Flanger.h",
+  "source_commit": "987b39dcb2e2e61e6225c3bc390fd00da824d226",
+  "helpers": "https://github.com/surge-synthesizer/sst-basic-blocks/tree/f38d62115e3a825d379f7e78faf69a8619f59357 (lipol, SurgeLag), sst-effects effects-shared/WidthProvider.h",
+  "license": "GPL-3.0-or-later (sst-effects and sst-basic-blocks); see LICENSE.md. *.orig are the unmodified upstream files.",
+  "adaptations": "SurgeFlanger.h: plain C++ without FXConfig/SIMD; per-call block length (<=32) with rates and interpolators scaled to it; parameters in Surge units; local xorshift random. Comb, LFO shapes, arp voice swap, feedback scaling and soft clip, damping, gain heuristics, output soft clip and width unchanged. Denormal-sized delay-line and damping values are flushed to zero.",
+  "files": {
+    "BlockInterpolators.h.orig": "cb1748780a17ceade314d06bbc93cc8d0b2a308e2386de6c8781e0bef03da20f",
+    "Flanger.h.orig": "6e7bb4cec3aa8bf0dda4dbace056336ba55f11662e87393d726d9041aa2b491c",
+    "LICENSE.md": "d4c0fe570b3750d909691ce5f494c9cd11ee047bbbedda9a5d75cc548e4df06b",
+    "Lag.h.orig": "f79d81e3a9b3cd69ca22e2cd0ec5e0909fe028ca8b4d3fe8c6e7a41f00fd6612",
+    "SurgeFlanger.h": "69fe9ce728368a348897d3988af5c5f761ee35e53a2d12cfbd769579ae2bb6f9",
+    "WidthProvider.h.orig": "032478dac60b8a19d5d046d7ae937f87cba243c93cfa806c7b654bcf5d947864"
+  }
+}

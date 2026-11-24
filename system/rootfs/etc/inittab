@@ -1,0 +1,5 @@
+::sysinit:/sbin/amalthea-boot
+::respawn:/sbin/amalthea-supervise
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/amalthea-shutdown
+ttyS0::askfirst:/bin/sh

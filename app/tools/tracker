@@ -1,0 +1,8 @@
+#!/bin/sh
+# Amalthea application launcher
+BASE=/mnt/UDISK/tracker-linux
+if test -x "$BASE/bin/usb_diagnostics.sh"; then
+  "$BASE/bin/usb_diagnostics.sh" >/dev/null 2>&1 &
+fi
+export LD_LIBRARY_PATH=/usr/trimui/lib:/usr/lib:/lib
+exec "$BASE/bin/amalthea" --project "$BASE/session.amalthea" --brightness 10

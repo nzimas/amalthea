@@ -1,0 +1,5 @@
+#!/bin/sh
+sync
+umount /mnt/SDCARD 2>/dev/null || true
+umount /mnt/UDISK 2>/dev/null || true
+sync
