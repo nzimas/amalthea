@@ -1,0 +1,68 @@
+<h1>Install from the browser <span class="tag">experimental</span></h1>
+<p class="lead">The same installer as <a href="install.html">the command-line one</a>, run from Chrome or Edge over
+  USB. Nothing to install on the computer.</p>
+
+<div class="warn">
+  <p><strong>Experimental: not yet tested on a real Brick.</strong> This page runs exactly the device-side steps of
+    the command-line installer, but its USB path has so far been tested only against a simulated Brick. Until that
+    changes, the <a href="install.html">command-line installer</a> is the recommended way.</p>
+  <p><strong>This replaces your Brick's operating system.</strong> The boot and root partitions are overwritten by
+    Amalthea Linux; the stock system is copied to your computer first. You do this <b>at your own risk</b>, with
+    <b>no warranty of any kind</b> (GNU GPL v3, sections 15 and 16). Not affiliated with or endorsed by TRIMUI.</p>
+</div>
+
+<p id="wi-support" class="warn" hidden></p>
+<p id="wi-sim" class="note" hidden></p>
+
+<h2 id="need">What you need</h2>
+<ul>
+  <li>A <b>TRIMUI Brick</b> (TG3040) on the stock firmware, charged to <b>at least 50 %</b>, and a <b>USB-C data cable</b>.</li>
+  <li><b>Chrome or Edge</b> on macOS, Windows, Linux or ChromeOS (WebUSB and folder access; Firefox and Safari have neither).</li>
+  <li>About <b>600 MB</b> free on the computer. No other program may be using ADB: if Android platform-tools are
+    installed, run <code>adb kill-server</code> first.</li>
+  <li>Windows: the <a href="https://developer.android.com/studio/run/win-usb">Google USB Driver</a> if Windows has no
+    driver for the Brick's ADB interface. Linux: the <code>android-udev-rules</code> package (USB vendor 18d1).</li>
+</ul>
+
+<h2 id="steps">Installing</h2>
+<ol class="steps">
+  <li><p>Download the installer archive. <span id="wi-latest">Latest release:
+      <a href="https://github.com/nzimas/amalthea/releases/latest">github.com/nzimas/amalthea/releases/latest</a>.</span>
+      Do not unzip it. Then choose it here:</p>
+    <p><input type="file" id="wi-zip" accept=".zip,application/zip"></p>
+    <p id="wi-pkg-status" class="note">(no archive chosen)</p>
+  </li>
+  <li><p>Switch the Brick on, let the stock system start, and connect it to the computer with the USB-C cable.</p></li>
+  <li><p><label><input type="checkbox" id="wi-ack"> I understand that this replaces the Brick's operating system, at
+      my own risk.</label></p>
+    <p><button type="button" class="btn primary" id="wi-install" disabled>Install or update</button></p>
+    <p class="note">The browser asks you to choose the Brick (it is listed as an ADB device) and, on a stock Brick,
+      a folder for the stock backup: it is saved there as <b>backup-&lt;serial&gt;</b>. <b>Keep that folder</b>; it is
+      how you go back to stock. On a Brick that already runs Amalthea (on its home screen), the same button updates
+      it and first copies your saved sessions to the folder.</p>
+  </li>
+</ol>
+
+<div id="wi-progress" hidden><span id="wi-progress-label"></span><progress id="wi-progress-bar"></progress></div>
+<div id="wi-log" class="wi-log" hidden aria-live="polite"></div>
+
+<h2 id="restore">Going back to the stock system</h2>
+<p>Choose the installer archive above, connect the Brick (Amalthea on its home screen) and press
+  <button type="button" class="btn small" id="wi-restore" disabled>Restore the stock system</button>.
+  If the Brick no longer holds its copy of the backup, the page asks for the folder with <b>backup-&lt;serial&gt;</b>.</p>
+
+<h2 id="limits">What is not known yet</h2>
+<p>The steps on the Brick are those of the command-line installer, run by the same script. What only a real Brick
+  can show:</p>
+<ul>
+  <li>whether the stock firmware's ADB daemon accepts the browser's connection (the USB interface, and
+    authentication, if it asks for it);</li>
+  <li>how fast the 515 MB backup comes over WebUSB with the old daemon's 4 KB packets;</li>
+  <li>whether, after the restart, the browser still has permission for the Brick running Amalthea. If it has
+    not, the page asks you to choose it again.</li>
+</ul>
+<p>If anything goes wrong, nothing is lost that the command-line installer cannot recover: it reads the same
+  state on the Brick. Please report problems on <a href="https://github.com/nzimas/amalthea/issues">GitHub</a>
+  with the log shown above.</p>
+
+<script type="module" src="js/web-install.js"></script>

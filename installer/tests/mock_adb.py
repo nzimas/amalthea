@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mock adb for installer/tests/run.sh: a simulated TG3040 in a Docker container (sim). Partitions are files /sim/p4, /sim/p5."""
 import os, subprocess, sys
-C = 'amalthea-sim'
+C = os.environ.get('SIM_CONTAINER', 'amalthea-sim')
 ENV = ['-e', 'BOOT_DEV=/sim/p4', '-e', 'ROOT_DEV=/sim/p5', '-e', 'SYSBLOCK=/sim/sys', '-e', 'BATT=/sim/batt',
        '-e', 'CPUINFO=/sim/cpuinfo', '-e', 'MOUNTS=/sim/mounts']
 def sh(cmd, env=()):

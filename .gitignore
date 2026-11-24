@@ -8,3 +8,4 @@ installer/backup-*/
 installer/sessions-*/
 installer/platform-tools/
 installer/payload/
+node_modules/

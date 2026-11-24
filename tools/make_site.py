@@ -215,14 +215,19 @@ def fragments():
         ("install.html", "install.html", "Install Amalthea", "Install",
          "Install Amalthea Linux on a TRIMUI Brick over USB from macOS, Linux or Windows, update it, "
          "or go back to the stock system."),
+        ("web-install.html", "web-install.html", "Install Amalthea from the browser (experimental)", "Install",
+         "Experimental: install Amalthea Linux on a TRIMUI Brick from Chrome or Edge over WebUSB, or go back "
+         "to the stock system."),
         ("projects.html", "projects.html", "Other projects by Nuno Zimas", "Other projects",
          "Firmware and instruments by Nuno Zimas for the M-VAVE FM-1, the Elektron Model:Cycles and Digitone II, "
          "the Ableton Move, the Akai MPC One and macOS."),
         ("apps.html", "apps.html", "Apps by Nuno Zimas", "Apps",
          "Music apps by Nuno Zimas for phones and tablets: Vascular, a touch instrument for iOS and Android."),
     ]
+    js_v = hashlib.sha256((DOCS / "js/web-install.js").read_bytes() + (DOCS / "js/vendor/webadb.js").read_bytes()).hexdigest()[:10]
     for out, frag, title, cur, desc in pages:
-        (DOCS / out).write_text(page(title, cur, (src / frag).read_text(), desc))
+        body = (src / frag).read_text().replace('src="js/web-install.js"', f'src="js/web-install.js?v={js_v}"')
+        (DOCS / out).write_text(page(title, cur, body, desc))
 
 
 def manual():
@@ -248,4 +253,4 @@ if __name__ == "__main__":
     manual()
     changelog()
     (DOCS / ".nojekyll").write_text("")
-    print("site: docs/index.html, screens.html, install.html, manual.html, changelog.html, projects.html, apps.html")
+    print("site: docs/index.html, screens.html, install.html, web-install.html, manual.html, changelog.html, projects.html, apps.html")
