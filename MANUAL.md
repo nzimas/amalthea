@@ -291,7 +291,7 @@ loudness-matched to its input: engaging it changes the sound, not the level.
 
 ## Effects
 
-The same inserts serve all three appliances: Tracker FX columns, FX slots and LIFEBLOOD nodes. Every parameter is
+The same inserts serve every instrument: Tracker FX columns, FX slots and LIFEBLOOD nodes. Every parameter is
 shown in its real unit.
 
 - **Drive and destruction:** DISTORTION, SATURATION, OVERDRIVE, FUZZ, RECTIFY, DIODE, RAT DRIVE, WAVEFOLD, AMP

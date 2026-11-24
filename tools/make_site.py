@@ -208,8 +208,8 @@ def fragments():
     src = ROOT / "site"
     pages = [
         ("index.html", "home.html", "Amalthea — a custom Linux distribution for the TRIMUI Brick", "Home",
-         "Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with three musical "
-         "instruments: a generative tracker, an effect rack and a living effect network for the M-VAVE FM-1."),
+         "Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with a platform for "
+         "musical instruments: so far a generative tracker, an effect rack and a living effect network for the M-VAVE FM-1."),
         ("screens.html", "screens.html", "Amalthea on the Brick's screen", "Screens",
          "Amalthea on the TRIMUI Brick's screen: the Tracker, the FX rack and LIFEBLOOD."),
         ("install.html", "install.html", "Install Amalthea", "Install",

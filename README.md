@@ -5,7 +5,7 @@
 
 # Amalthea
 
-**Turn your TrimUI Brick into many instruments.**
+**Turn your TrimUI Brick into multiple instruments.**
 
 Amalthea is not an app, a launcher or an overlay on the stock firmware. It **replaces the Brick's operating
 system**. The installer writes a new boot partition and a new root filesystem: Amalthea Linux, a minimal
@@ -14,8 +14,8 @@ audio the hardware allows. The gaming frontend, the emulators, the service stack
 shipped with are gone (until you put them back with the restore script).
 
 Amalthea nursed Zeus; in the tradition where she is the goat herself, one of her horns became the cornucopia,
-the horn of plenty. Amalthea is also Jupiter's red moon. The system offers plenty: three instruments, twelve
-synthesis engines, more than seventy effects, and generators that draw music, sounds and effect networks at random.
+the horn of plenty. Amalthea is also Jupiter's red moon. The system offers plenty: a growing set of instruments,
+twelve synthesis engines, more than seventy effects, and generators that draw music, sounds and effect networks at random.
 
 **Website, manual and installation guide: <https://nzimas.github.io/amalthea/>**
 
@@ -23,7 +23,8 @@ State: **build 36**. Each build is described in [CHANGELOG.md](CHANGELOG.md).
 
 ## The instruments
 
-On power-up the Brick shows the Amalthea home screen with three appliances:
+Amalthea is a platform: these are its first instruments, and more will arrive with new builds. On power-up
+the Brick shows the Amalthea home screen with:
 
 - **TRACKER** — a 12-track generative tracker. Each track has five independently clocked columns (NOTE, MOD,
   INST, FX1, FX2), its own length, clock and one of 19 playback directions, conditional events, per-step effects
@@ -100,7 +101,7 @@ The full guide, with troubleshooting, is at <https://nzimas.github.io/amalthea/i
 ## Using it
 
 The [manual](MANUAL.md) (also [on the website](https://nzimas.github.io/amalthea/manual.html)) covers every
-control of the three appliances. The essentials:
+control of every instrument. The essentials:
 
 | Button | Everywhere |
 | --- | --- |
