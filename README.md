@@ -56,7 +56,7 @@ Each instrument has a tile on the home screen:
   keep mutating on their own (angiogenesis).
 
 While its USB port is not hosting an FM-1, the Brick is also a class-compliant USB audio input: plug it into a
-computer or phone and record its stereo output without drivers, whatever instrument is playing.
+computer or phone and record its stereo output without drivers.
 
 ## Why a whole operating system
 
