@@ -9,29 +9,45 @@
 
 Amalthea is not an app, a launcher or an overlay on the stock firmware. It **replaces the Brick's operating
 system**. The installer writes a new boot partition and a new root filesystem: Amalthea Linux, a minimal
-distribution built for one purpose, playing the Amalthea instruments with the lowest latency and the steadiest
-audio the hardware allows. The gaming frontend, the emulators, the service stack and everything else the Brick
+distribution built for one purpose: a platform for musical instruments, running them with the lowest latency
+and the steadiest audio the hardware allows. The gaming frontend, the emulators, the service stack and everything else the Brick
 shipped with are gone (until you put them back with the restore script).
 
 Amalthea nursed Zeus; in the tradition where she is the goat herself, one of her horns became the cornucopia,
-the horn of plenty. Amalthea is also Jupiter's red moon. The system offers plenty: a growing set of instruments,
-twelve synthesis engines, more than seventy effects, and generators that draw music, sounds and effect networks at random.
+the horn of plenty. Amalthea is also Jupiter's red moon. The platform offers plenty: synthesis engines, more
+than seventy effects, generators and a master chain, shared by every instrument and used by each in its own way.
+New instruments arrive with new builds.
 
 **Website, manual and installation guide: <https://nzimas.github.io/amalthea/>**
 
 State: **build 36**. Each build is described in [CHANGELOG.md](CHANGELOG.md).
 
-## The instruments
+## A platform for instruments
 
-Amalthea is a platform: these are its first instruments, and more will arrive with new builds. On power-up
-the Brick shows the Amalthea home screen with:
+Amalthea is built to host a growing fleet of instruments. Underneath all of them sit the same resources:
+
+- **Synthesis engines**: VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT, CALIGULA and
+  FM DRUM.
+- **Effects**: more than seventy inserts (drives and destruction, filters, delays, reverbs, granular, resonators,
+  cuts and repeats, spectral effects, vocoders), with values in real units.
+- **Generators** that draw melodies, rhythms, sounds, effects and their parameters at random, at the density you set.
+- **A master chain**: ABRASION, CORROSION, MODULATION, compressor, delay and reverb.
+- **Session banks**, saved and loaded only when you do it.
+- **The audio and USB stack**: low-latency ALSA output, hosting an M-VAVE FM-1's multitrack audio and MIDI clock,
+  and class-compliant USB audio out.
+
+Each instrument puts them to a different use: one sequences the engines, another runs effects over external
+audio, another grows networks of effects. New instruments arrive with new builds, and the installer adds them in
+place.
+
+### On the platform today
+
+Each instrument has a tile on the home screen:
 
 - **TRACKER** — a 12-track generative tracker. Each track has five independently clocked columns (NOTE, MOD,
   INST, FX1, FX2), its own length, clock and one of 19 playback directions, conditional events, per-step effects
-  and an instrument from twelve native engines: VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA,
-  RESURGENT, CALIGULA and FM DRUM. Every column can be drawn at random (or euclidean) at the density you choose;
-  melodies follow 38 scales. Master chain: ABRASION, CORROSION, MODULATION, compressor, delay, reverb. 32 patterns
-  per session, 64 sessions.
+  and its own twelve sounds from the synthesis engines. Every column can be drawn at random (or euclidean) at the density you choose;
+  melodies follow 38 scales. 32 patterns per session, 64 sessions.
 - **FX** — a twelve-slot effect rack for the multitrack USB audio of an M-VAVE FM-1 (running Bigorna, Tonitor,
   Lilliput or Norilsk): the Brick hosts the FM-1 over USB, takes its separate tracks and passes each through two
   insert slots, each slot with its own 16-step parameter sequencer, clocked by the FM-1's MIDI clock.
@@ -40,7 +56,7 @@ the Brick shows the Amalthea home screen with:
   keep mutating on their own (angiogenesis).
 
 While its USB port is not hosting an FM-1, the Brick is also a class-compliant USB audio input: plug it into a
-computer or phone and record its stereo output without drivers.
+computer or phone and record its stereo output without drivers, whatever instrument is playing.
 
 ## Why a whole operating system
 
