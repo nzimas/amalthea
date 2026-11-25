@@ -1,3 +1,19 @@
+## Build 39 — LIFEBLOOD follows the FM1's pans and clock
+
+- LIFEBLOOD with separate FM1 tracks: each track is placed where the FM1 pans it, instead
+  of a fixed spread by track number (track 1 was well to the left). The FM1's stems are
+  taken before its pan, so LIFEBLOOD reads each track's pan from CC 10 on MIDI channels
+  1–6 (BIGORNA build 121 sends it in USB TRACKS mode), with the FM1's constant-power
+  law, gliding over 50 ms. A track whose pan has not been received is centred. Tracks
+  keep their place whether they pass straight to OUT or through the network.
+- The FM1's MIDI clock tempo is counted over the last two beats of pulses and rounded to
+  a whole BPM. Pulses that USB delivers in bursts no longer read the tempo slow, and
+  119.8 is no longer cut to 119, so synced effects run at the FM1's exact tempo. A tempo
+  change on the FM1 is followed within about two beats.
+- LIFEBLOOD's TEMPO setting shows `EXT` and the FM1's tempo while its clock is locked,
+  and cannot be dialled then; the session's own tempo returns when the clock stops.
+  FX's clock display uses the same whole-BPM tempo.
+
 ## Build 38 — MOD TRANSPOSE, empty MOD cells, FX draws
 
 - MOD cells are empty by default (`---`) instead of `+00`. Older sessions load their zero

@@ -244,9 +244,9 @@
 <tr><td>Bank / Shift + Bank</td><td>Snapshots (32) / sessions (64)</td><td>same</td></tr>
 <tr><td>Shift + A</td><td>Session settings</td><td>same</td></tr>
 </table>
-<p><b>Session settings:</b> TEMPO (external clock overrides it); PATH, ABSTRACT (textures, spaces, colour) or RHYTHMIC (cuts, gates, clockable textures, everything synced and at least 72 % wet); CHARACTER, the recipe within the path (ANY; DRIFT, GRIT, SPACE, BLOOM; PULSE, CUT, GATE, MAYHEM, INDUSTRIAL); NODES, the largest network (3–7); GROWTH, the angiogenesis rate (6–120 mutations a minute); MIX, the network's wet share.</p>
+<p><b>Session settings:</b> TEMPO (while the FM-1's clock is locked it shows <code>EXT</code> and the FM-1's tempo, and cannot be dialled); PATH, ABSTRACT (textures, spaces, colour) or RHYTHMIC (cuts, gates, clockable textures, everything synced and at least 72 % wet); CHARACTER, the recipe within the path (ANY; DRIFT, GRIT, SPACE, BLOOM; PULSE, CUT, GATE, MAYHEM, INDUSTRIAL); NODES, the largest network (3–7); GROWTH, the angiogenesis rate (6–120 mutations a minute); MIX, the network's wet share.</p>
 <p><b>Angiogenesis:</b> nodes drift; one mutation at a time a vessel is cut or sprouts, a node buds or is absorbed, or a node redraws its parameters. Vessels fade in and out over 120 ms; a new network crossfades from the old over half a second, letting its tails ring. Networks are always feed-forward (no feedback loops) and stay within the Brick's CPU budget.</p>
-<p>With a multitrack firmware, each FM-1 track is its own IN, numbered down the left edge; only tracks heard in the last 30 seconds are routed, and about a third pass straight to OUT. Every insert, and the whole network, is loudness-matched to its input: engaging it changes the sound, not the level.</p>
+<p>With a multitrack firmware, each FM-1 track is its own IN, numbered down the left edge; only tracks heard in the last 30 seconds are routed, and about a third pass straight to OUT. Each track sits where the FM-1 pans it, through the network or straight to OUT: the FM-1 sends each track's pan as CC 10 on MIDI channels 1–6 (BIGORNA from build 121, in USB TRACKS mode). A track whose pan has not arrived is centred. Every insert, and the whole network, is loudness-matched to its input: engaging it changes the sound, not the level.</p>
 <h2 id="effects">Effects</h2>
 <p>The same inserts serve every instrument: Tracker FX columns, FX slots and LIFEBLOOD nodes. Every parameter is shown in its real unit.</p>
 <ul>
@@ -268,7 +268,7 @@
 </ul></div>
     </main>
     <footer>
-      <p>Amalthea build 38. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 39. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

@@ -65,6 +65,7 @@ struct FxAudio::Impl {
  float netBuffers[2][LifebloodVertices][128]{};
  LevelMatch netLevel;   // LIFEBLOOD: the network's output keeps the input's loudness
  float trackIn[LifebloodTracks][512]{};                 // this block's FM1 track lanes, stereo
+ std::array<float,LifebloodTracks> panNow{{.5f,.5f,.5f,.5f,.5f,.5f}};   // each track's stereo position now (0 left .. 1 right)
  std::array<int64_t,LifebloodTracks> silentFor{{int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40}};
  // Render one graph over n <= 64 frames from in (interleaved stereo) into out.
  // in: the stereo IN for this chunk; tracks: each FM1 track's stereo lane, offset `at`.
@@ -120,14 +121,23 @@ struct FxAudio::Impl {
  void renderNetwork(float (*lanes)[512],int count,float*out,int frames,int bpm){
   bool stereo=stats.usbState.load()==4;
   float in[512],peakIn=0;bool tracksIn=!stereo&&count>1;
-  // Separate FM1 tracks: each at the FX strips' default 80%, spread gently across the
-  // field. They feed the track inputs; their sum is the stereo IN.
+  // Separate FM1 tracks: each at the FX strips' default 80%, placed where the FM1 pans it.
+  // The FM1's stems are taken before its pan; it reports each track's pan as CC 10
+  // (MidiTrackPan), and a track whose pan has not been heard stays centred. The same
+  // constant-power law as the FM1's, gliding over 50 ms. They feed the track inputs;
+  // their sum is the stereo IN.
   std::fill(&trackIn[0][0],&trackIn[0][0]+LifebloodTracks*512,0.f);
+  std::array<float,LifebloodTracks> pl0{},pr0{},pl1{},pr1{};
+  if(tracksIn)for(int c=0;c<count&&c<LifebloodTracks;c++){
+   int v=stats.usbPan[c].load(std::memory_order_relaxed);float target=v<0?.5f:midiPanPosition(v);
+   float from=panNow[c];panNow[c]=target>from?std::min(target,from+frames/2205.f):std::max(target,from-frames/2205.f);
+   pl0[c]=std::cos(from*1.5707963f);pr0[c]=std::sin(from*1.5707963f);pl1[c]=std::cos(panNow[c]*1.5707963f);pr1[c]=std::sin(panNow[c]*1.5707963f);
+  }
   for(int i=0;i<frames;i++){
-   float l=0,r=0;
+   float l=0,r=0,k=float(i+1)/frames;
    if(!tracksIn){l=lanes[0][i*2];r=lanes[0][i*2+1];}
    else for(int c=0;c<count&&c<LifebloodTracks;c++){
-    float pan=.2f+.6f*c/(count-1),x=lanes[c][i*2]*.8f*1.41421356f,tl=x*std::cos(pan*1.5707963f),tr=x*std::sin(pan*1.5707963f);
+    float x=lanes[c][i*2]*.8f*1.41421356f,tl=x*(pl0[c]+(pl1[c]-pl0[c])*k),tr=x*(pr0[c]+(pr1[c]-pr0[c])*k);
     trackIn[c][i*2]=tl;trackIn[c][i*2+1]=tr;l+=tl;r+=tr;
    }
    in[i*2]=l;in[i*2+1]=r;peakIn=std::max(peakIn,std::max(std::abs(l),std::abs(r)));
@@ -172,7 +182,7 @@ struct FxAudio::Impl {
  uint64_t submittedReset=0;
  FxRack rack{};DeviceSettings device{};std::array<SlotDSP*,12> dsp{};
  std::array<AmaltheaWalk,12> walks{};std::array<int,12> current{},lengths{},directions{};std::array<double,12> phase{};std::array<float,6> wetMix{{1,1,1,1,1,1}};std::array<float,12> stepGate{{1,1,1,1,1,1,1,1,1,1,1,1}};
- std::atomic<uint64_t> clockTicks{0},clockEpoch{0};uint64_t lastTicks=0,lastEpoch=0;MidiClock clock{};
+ std::atomic<uint64_t> clockTicks{0},clockEpoch{0};uint64_t lastTicks=0,lastEpoch=0;MidiClock clock{};MidiTrackPan trackPan{};int panFirmware=-1;
  std::array<std::thread,2> workers;std::mutex jobMutex;std::condition_variable jobReady,jobDone;
  uint64_t generation=0;int remaining=0;bool workersExit=false;
  bool jobNetwork=false;const float*jobNetIn=nullptr;float*jobNetOut=nullptr;   // LIFEBLOOD crossfade job
@@ -240,7 +250,8 @@ struct FxAudio::Impl {
   }
   written.store(w,std::memory_order_release);
  }
- void byte(uint8_t b,double when){clock.byte(b,when);if(clock.reset){clockEpoch++;clock.reset=false;}clockTicks=clock.ticks;stats.usbBpm=clock.bpm;stats.usbClock=clock.locked;stats.usbRunning=clock.running;}
+ void byte(uint8_t b,double when){clock.byte(b,when);if(clock.reset){clockEpoch++;clock.reset=false;}clockTicks=clock.ticks;stats.usbBpm=float(clock.tempo);stats.usbClock=clock.locked&&clock.tempo>0;stats.usbRunning=clock.running;
+  if(trackPan.byte(b))for(int t=0;t<LifebloodTracks;t++)stats.usbPan[t].store(trackPan.pan[t],std::memory_order_relaxed);}
  void host(){
 #ifdef AMALTHEA_USB_HOST
   PersistentAudioLog durable("/mnt/UDISK/tracker-linux/logs/audio");
@@ -310,7 +321,10 @@ struct FxAudio::Impl {
       int err=snd_pcm_set_params(pcm,SND_PCM_FORMAT_S16_LE,SND_PCM_ACCESS_RW_INTERLEAVED,channels,44100,0,64000);rate=44100;
       if(err<0){err=snd_pcm_set_params(pcm,SND_PCM_FORMAT_S16_LE,SND_PCM_ACCESS_RW_INTERLEAVED,channels,48000,0,64000);rate=48000;}
       if(err<0){failure=std::string(name)+" audio parameters: "+snd_strerror(err);snd_pcm_close(pcm);pcm=nullptr;stats.usbState=3;continue;}
-      int started=snd_pcm_start(pcm);if(started<0){failure=std::string(name)+" capture start: "+snd_strerror(started);snd_pcm_close(pcm);pcm=nullptr;stats.usbState=3;continue;}stats.usbChannels=mapping.count;stats.usbFirmware=firmware;stats.usbState=mapping.stereo?4:1;
+      int started=snd_pcm_start(pcm);if(started<0){failure=std::string(name)+" capture start: "+snd_strerror(started);snd_pcm_close(pcm);pcm=nullptr;stats.usbState=3;continue;}stats.usbChannels=mapping.count;stats.usbFirmware=firmware;
+      // Pans heard from this FM1 stay known while the appliance closes and reopens; another firmware starts centred.
+      if(firmware!=panFirmware){panFirmware=firmware;trackPan=MidiTrackPan{};for(auto&v:stats.usbPan)v.store(-1,std::memory_order_relaxed);}
+      stats.usbState=mapping.stereo?4:1;
       char raw[32];snprintf(raw,sizeof raw,"hw:%d,0,0",card);snd_rawmidi_open(&midi,nullptr,raw,SND_RAWMIDI_NONBLOCK);
       lastCapture=0;record("capture_start",rate,description.c_str());
       snd_pcm_uframes_t bufferFrames=0,periodFrames=0;snd_pcm_get_params(pcm,&bufferFrames,&periodFrames);
@@ -341,7 +355,7 @@ struct FxAudio::Impl {
      record("capture_recovery",recovered);
      if(recovered<0){close();next=time;}else {resetRequested=true;lastCapture=0;}}
     if(midi){uint8_t bytes[256];auto n=snd_rawmidi_read(midi,bytes,sizeof bytes);for(int i=0;i<n;i++)byte(bytes[i],nowSeconds());}
-    clock.expire(nowSeconds());stats.usbClock=clock.locked;stats.usbRunning=clock.running;
+    clock.expire(nowSeconds());stats.usbClock=clock.locked&&clock.tempo>0;stats.usbRunning=clock.running;
    }
    health();std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }

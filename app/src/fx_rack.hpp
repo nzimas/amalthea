@@ -34,11 +34,28 @@ void randomizeFxParameters(Effect&,InsertSettings&,uint32_t&seed);
 // drawn; pre-distortion, diffusion, crusher, shifter, phaser, ducking and EQ return to
 // their defaults, off); MATRIX keeps its two delay nodes on its default delay type.
 void boundInsertCost(Effect&,InsertSettings&);
+// The FM1's MIDI clock (24 pulses a beat). The tempo is counted over the last pulses
+// (up to 96, about two seconds), not taken from single intervals: USB delivers pulses
+// in bursts, several at one timestamp, and an interval average would read them slow.
+// `tempo` is that count rounded to a whole BPM (the FM1's tempo is whole), held until
+// the count moves more than 0.6 BPM away, so the effects are not retuned on jitter.
 struct MidiClock {
- double bpm=0,last=0,interval=0;uint64_t ticks=0;bool locked=false,running=false,reset=false,stopped=false;int pulse=0;
+ static constexpr int Window=97;
+ double bpm=0,last=0;uint64_t ticks=0;bool locked=false,running=false,reset=false,stopped=false;int tempo=0;
+ std::array<double,Window> times{};int count=0,head=0,settle=0;
  void byte(uint8_t,double seconds);
  void expire(double seconds);
 };
+// Channel messages from the FM1: CC 10 on channel t+1 is the pan of track t (BIGORNA's
+// default OUT channels; it sends pan there with SEND CC). The USB stems are taken before
+// the FM1's pan, so LIFEBLOOD places each one where the FM1 does. -1: not heard yet.
+struct MidiTrackPan {
+ uint8_t status=0,data=0;bool second=false,sysex=false;
+ std::array<int8_t,6> pan{{-1,-1,-1,-1,-1,-1}};
+ bool byte(uint8_t);   // true when a pan changed
+};
+// A received CC 10 value as a stereo position 0 (left) .. 1 (right); 64 is the centre.
+float midiPanPosition(int value);
 struct UsbMapping {int count=0,offset=0;bool stereo=false;};
 UsbMapping fm1Mapping(int firmware,int channels);
 const char* fm1Name(int firmware);

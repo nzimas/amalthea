@@ -135,7 +135,9 @@ int main(int argc,char**argv){
   {uint32_t seed=21;for(int i=0;i<500;i++){auto n=growLifeblood({uint8_t(i%LifebloodCharacters),7,pathOf(uint8_t(i%LifebloodCharacters))},seed,device);rewireLifeblood(n,seed);check(lifebloodValid(n)&&recipeRules(n),"every rewire keeps the network valid and the recipe rules");}}
   e.action(Action::ShiftDown);e.action(Action::ColumnSettings);e.action(Action::ShiftUp);check(e.page==Page::LifebloodSettings,"Shift+A opens session settings");
   e.action(Action::Right);check(e.notice=="TEMPO"&&e.noticeDetail=="121 BPM"&&e.noticeDetailSerial==e.noticeSerial,"a changed setting shows a large value overlay");
-  e.action(Action::Left);e.action(Action::Cancel);
+  e.action(Action::Left);
+  e.lbClockBpm=127;e.action(Action::Right);check(s.tempo==120&&e.noticeDetail=="FM1 CLOCK 127 BPM","the FM1 clock holds the tempo; dialling names it");e.lbClockBpm=0;
+  e.action(Action::Cancel);
   e.action(Action::TrackSettings);check(s.angiogenesis.active,"B starts angiogenesis");
   bool changed=false;for(int i=0;i<600;i++)changed|=e.lifebloodTick(1/30.f);check(changed,"ticks advance angiogenesis");
   e.action(Action::TrackSettings);check(!s.angiogenesis.active,"B stops it");
@@ -180,6 +182,16 @@ int main(int argc,char**argv){
   for(int b=0;b<400;b++){for(int i=0;i<256;i++)for(int c=0;c<6;c++){float v=(c==1||c==4)?.3f*std::sin((b*256+i)*(.02f+c*.01f)):0;input[(i*6+c)*2]=input[(i*6+c)*2+1]=v;}
    audio.feed(input,256,6,44100);audio.render(out,256);for(float v:out){check(std::isfinite(v),"six-track network output finite");energy+=v*v;}}
   check(stats.lifebloodHeard.load()==0b010010,"the tracks sounding are detected (2 and 5)");check(energy>1,"six-track network passes sound");}
+ // Separate tracks sit where the FM1 pans them (CC 10); a pan not yet heard is the centre.
+ {AudioStats stats;FxAudio audio(stats);stats.usbState=1;stats.usbChannels=6;
+  auto n=blankLifeblood();n.inputs=6;n.link[LifebloodIn][LifebloodOut]=0;for(int t=0;t<6;t++)n.link[LifebloodTrackBase+t][LifebloodOut]=100;n.generation=1;
+  audio.submit(n,120,100,false,device);audio.activate(true);float input[256*12],out[512];
+  auto balance=[&](int blocks){double l=0,r=0;for(int b=0;b<blocks;b++){for(int i=0;i<256;i++)for(int c=0;c<6;c++){float v=c==0?.3f*std::sin((b*256+i)*.03f):0;input[(i*6+c)*2]=input[(i*6+c)*2+1]=v;}
+   audio.feed(input,256,6,44100);audio.render(out,256);if(b>=blocks/2)for(int i=0;i<256;i++){l+=out[i*2]*out[i*2];r+=out[i*2+1]*out[i*2+1];}}return std::pair{l,r};};
+  auto [l0,r0]=balance(120);check(l0>1&&std::fabs(10*std::log10(l0/r0))<.1,"a track whose pan is unknown is centred (not spread by its number)");
+  stats.usbPan[0]=0;auto [l1,r1]=balance(60);check(l1>1&&r1<l1*1e-4,"track 1 panned hard left on the FM1 stays left");
+  stats.usbPan[0]=127;auto [l2,r2]=balance(60);check(r2>1&&l2<r2*1e-4,"and hard right stays right");
+  stats.usbPan[0]=64;auto [l3,r3]=balance(60);check(std::fabs(10*std::log10(l3/r3))<.1,"CC 10 64 is the centre");}
  // Loudness matching: every insert engaged at 85% keeps the input's level within 2.5 dB.
  for(auto t:selectableEffects()){if(t==FxType::None||t==FxType::Random)continue;
   InsertEffect fx(t==FxType::Space);std::unique_ptr<PortedProcessor> port;int k=portedIndex(t);PortedPointers ptr{};if(k>=0){port=std::make_unique<PortedProcessor>(t);ptr[k]=port.get();fx.attachPorted(ptr);}

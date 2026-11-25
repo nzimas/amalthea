@@ -109,14 +109,41 @@ bool randomizeFxSequence(FxRack&r,int slot){
  return true;
 }
 void MidiClock::byte(uint8_t b,double now){
- if(b==0xfa){ticks=0;pulse=0;running=true;stopped=false;reset=true;last=0;return;}
+ if(b==0xfa){ticks=0;running=true;stopped=false;reset=true;return;}
  if(b==0xfb){running=true;stopped=false;return;}if(b==0xfc){running=false;stopped=true;return;}
  if(b!=0xf8)return;
  if(!stopped)running=true;
- if(last>0){double d=now-last;if(d>.001&&d<.25){interval=interval?interval*.9+d*.1:d;bpm=60/(24*interval);locked=true;}else if(d>.25){locked=false;interval=0;}}
+ // A gap of a quarter second: a new clock; the count starts again.
+ if(last>0&&now-last>.25){count=0;settle=0;locked=false;tempo=0;}
  last=now;ticks++;
+ times[head]=now;head=(head+1)%Window;count=std::min(count+1,Window);
+ if(count<25)return;   // a beat at least
+ double first=times[(head-count+Window)%Window],span=now-first;if(span<=0)return;
+ double estimate=60*(count-1)/(24*span);
+ // A tempo change on the FM1: the last beat no longer agrees with the window. Until a whole
+ // beat of pulses has come at the new tempo, the count covers only the last beat.
+ double beat=now-times[(head-25+Window)%Window],recent=beat>0?60/beat:estimate;
+ if(count>25&&std::abs(recent-estimate)>std::max(2.0,estimate*.03))settle=24;
+ if(settle>0){settle--;count=25;estimate=recent;}
+ bpm=estimate;locked=true;
+ if(!tempo||std::abs(bpm-tempo)>.6)tempo=int(std::lround(bpm));
 }
-void MidiClock::expire(double now){if(last&&now-last>.75){locked=false;running=false;interval=0;}}
+void MidiClock::expire(double now){if(last&&now-last>.75){locked=false;running=false;count=0;tempo=0;}}
+bool MidiTrackPan::byte(uint8_t b){
+ if(b>=0xf8)return false;                       // real time: between any bytes, no effect
+ if(b==0xf0){sysex=true;status=0;return false;}
+ if(b>=0x80){sysex=false;status=b<0xf0?b:0;second=false;return false;}   // a status (system common ends running status)
+ if(sysex||!status)return false;
+ int kind=status>>4,need=kind==0xc||kind==0xd?1:2;
+ if(need==1)return false;
+ if(!second){data=b;second=true;return false;}
+ second=false;   // running status: the next data byte starts a new message
+ int channel=status&15;
+ if(kind!=0xb||data!=10||channel>=6)return false;
+ if(pan[channel]==int8_t(b))return false;
+ pan[channel]=int8_t(b);return true;
+}
+float midiPanPosition(int v){return std::clamp(.5f+.5f*(v-64)/63.f,0.f,1.f);}
 const char*fm1Name(int f){static const char*n[]={"FM1","BIGORNA","TONITOR","NORILSK","LILLIPUT"};return n[std::clamp(f,0,4)];}
 int fm1Firmware(const std::string&s){std::string v=s;for(auto&c:v)c=std::tolower(static_cast<unsigned char>(c));if(v.find("bigorna")!=v.npos)return 1;if(v.find("tonitor")!=v.npos)return 2;if(v.find("norilsk")!=v.npos)return 3;if(v.find("lilliput")!=v.npos||v.find("liliput")!=v.npos)return 4;return 0;}
 UsbMapping fm1Mapping(int firmware,int channels){if(channels==2)return {1,0,true};if(channels==3)return {3,0,false};if(channels==6)return {6,0,false};if(channels==8&&(firmware==1||firmware==2||firmware==4))return {6,2,false};return {};}

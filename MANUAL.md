@@ -294,7 +294,8 @@ vessels between them and corpuscles travelling along the flow. It starts with IN
 | Bank / Shift + Bank | Snapshots (32) / sessions (64) | same |
 | Shift + A | Session settings | same |
 
-**Session settings:** TEMPO (external clock overrides it); PATH, ABSTRACT (textures, spaces, colour) or RHYTHMIC
+**Session settings:** TEMPO (while the FM-1's clock is locked it shows `EXT` and the FM-1's tempo, and cannot be
+dialled); PATH, ABSTRACT (textures, spaces, colour) or RHYTHMIC
 (cuts, gates, clockable textures, everything synced and at least 72 % wet); CHARACTER, the recipe within the path
 (ANY; DRIFT, GRIT, SPACE, BLOOM; PULSE, CUT, GATE, MAYHEM, INDUSTRIAL); NODES, the largest network (3–7); GROWTH,
 the angiogenesis rate (6–120 mutations a minute); MIX, the network's wet share.
@@ -305,7 +306,9 @@ a second, letting its tails ring. Networks are always feed-forward (no feedback 
 Brick's CPU budget.
 
 With a multitrack firmware, each FM-1 track is its own IN, numbered down the left edge; only tracks heard in the
-last 30 seconds are routed, and about a third pass straight to OUT. Every insert, and the whole network, is
+last 30 seconds are routed, and about a third pass straight to OUT. Each track sits where the FM-1 pans it,
+through the network or straight to OUT: the FM-1 sends each track's pan as CC 10 on MIDI channels 1–6 (BIGORNA
+from build 121, in USB TRACKS mode). A track whose pan has not arrived is centred. Every insert, and the whole network, is
 loudness-matched to its input: engaging it changes the sound, not the level.
 
 ## Effects

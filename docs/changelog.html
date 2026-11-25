@@ -47,6 +47,12 @@
   <div class="content">
     <main>
 <h1>Changelog</h1>
+<h2 id="build-39-lifeblood-follows-the-fm1s-pans-and-clock">Build 39 — LIFEBLOOD follows the FM1's pans and clock</h2>
+<ul>
+<li>LIFEBLOOD with separate FM1 tracks: each track is placed where the FM1 pans it, instead of a fixed spread by track number (track 1 was well to the left). The FM1's stems are taken before its pan, so LIFEBLOOD reads each track's pan from CC 10 on MIDI channels 1–6 (BIGORNA build 121 sends it in USB TRACKS mode), with the FM1's constant-power law, gliding over 50 ms. A track whose pan has not been received is centred. Tracks keep their place whether they pass straight to OUT or through the network.</li>
+<li>The FM1's MIDI clock tempo is counted over the last two beats of pulses and rounded to a whole BPM. Pulses that USB delivers in bursts no longer read the tempo slow, and 119.8 is no longer cut to 119, so synced effects run at the FM1's exact tempo. A tempo change on the FM1 is followed within about two beats.</li>
+<li>LIFEBLOOD's TEMPO setting shows <code>EXT</code> and the FM1's tempo while its clock is locked, and cannot be dialled then; the session's own tempo returns when the clock stops. FX's clock display uses the same whole-BPM tempo.</li>
+</ul>
 <h2 id="build-38-mod-transpose-empty-mod-cells-fx-draws">Build 38 — MOD TRANSPOSE, empty MOD cells, FX draws</h2>
 <ul>
 <li>MOD cells are empty by default (<code>---</code>) instead of <code>+00</code>. Older sessions load their zero offsets as empty cells; other offsets are unchanged.</li>
@@ -353,7 +359,7 @@
 </ul>
     </main>
     <footer>
-      <p>Amalthea build 38. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 39. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

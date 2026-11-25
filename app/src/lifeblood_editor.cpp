@@ -89,6 +89,8 @@ void Editor::lifebloodAction(Action a){
   if(a==Action::Up)lbSettingsField=(lbSettingsField+LifebloodSettingsFields-1)%LifebloodSettingsFields;
   if(a==Action::Down)lbSettingsField=(lbSettingsField+1)%LifebloodSettingsFields;
   int d=a==Action::Right?1:a==Action::Left?-1:0;if(!d)return;
+  // The FM1's clock sets the tempo while it runs: the session's own value waits underneath.
+  if(lbSettingsField==0&&lbClockBpm>0){notice="TEMPO";noticeDetail="FM1 CLOCK "+std::to_string(lbClockBpm)+" BPM";noticeMs=1200;noticeDetailSerial=++noticeSerial;return;}
   if(lbSettingsField==0)s.tempo=uint16_t(std::clamp(int(s.tempo)+d*(shift?10:1),30,300));
   // PATH chooses the recipes; CHARACTER offers ANY and the PATH's own.
   if(lbSettingsField==1){s.path=uint8_t((s.path+d+LifebloodPaths)%LifebloodPaths);if(!lifebloodOnPath(s.character,s.path))s.character=CharacterAny;}

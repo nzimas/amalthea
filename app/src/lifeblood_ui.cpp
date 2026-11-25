@@ -92,7 +92,7 @@ void drawLifebloodUI(Canvas&c,const Editor&e,const AudioStats&audio){
   text(24,187,976,"SESSION SETTINGS",38,Accent);
   const char*names[]={"TEMPO","PATH","CHARACTER","NODES","GROWTH","MIX"};
   int rate=int(std::lround(6+114*s.growth/100.f));
-  std::string values[]={std::to_string(s.tempo)+" BPM"+(audio.usbClock?" (EXT)":""),lifebloodPathName(s.path),lifebloodCharacterName(s.character),"UP TO "+std::to_string(s.maxNodes),
+  std::string values[]={(audio.usbClock&&audio.usbBpm>0?"EXT "+std::to_string(int(audio.usbBpm.load()+.5f))+" BPM":std::to_string(s.tempo)+" BPM"),lifebloodPathName(s.path),lifebloodCharacterName(s.character),"UP TO "+std::to_string(s.maxNodes),
    std::to_string(s.growth)+"% / "+std::to_string(rate)+" PER MIN",std::to_string(s.mix)+"% WET"};
   for(int f=0;f<LifebloodSettingsFields;f++){int y=250+f*78;bool selected=e.lbSettingsField==f;if(selected)box(24,y-8,976,70,Accent);
    text(48,y,400,names[f],40,selected?Ink:Dim);text(430,y,546,values[f],40,selected?Ink:Ivory);}

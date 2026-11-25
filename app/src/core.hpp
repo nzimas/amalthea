@@ -273,6 +273,7 @@ struct Editor {
   bool lbBypass=false;           // Play: the input passes dry (runtime only)
   int lbInputs=-1;               // FM1 inputs: -1 none yet, 0 stereo, 1..6 tracks (from the USB layout)
   uint8_t lbHeard=0;             // tracks heard recently (bit per track; from the audio)
+  int lbClockBpm=0;              // the FM1's MIDI clock tempo while it is locked, else 0 (from the audio)
   uint32_t lbGeneration=0;       // runtime topology counter
   float lbClock=0;               // animation time, seconds
   bool inLifeblood()const{return page==Page::LifebloodField||page==Page::LifebloodNode||page==Page::LifebloodSnapshots||page==Page::LifebloodSessions||page==Page::LifebloodSettings;}

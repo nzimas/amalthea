@@ -806,6 +806,7 @@ int main(int argc, char **argv) {
       int usb=audio.stats.usbState.load(),channels=audio.stats.usbChannels.load();
       editor.lbInputs=usb==4||(usb==1&&channels==1)?0:usb==1?std::min(channels,LifebloodTracks):-1;
       editor.lbHeard=audio.stats.lifebloodHeard.load();
+      editor.lbClockBpm=audio.stats.usbClock.load()?int(audio.stats.usbBpm.load()+.5f):0;
       // Animation and angiogenesis run on the UI thread; the audio only sees networks.
       static auto lastTick=now;float dt=std::chrono::duration<float>(now-lastTick).count();lastTick=now;
       if(editor.lifebloodTick(std::min(dt,.1f)))syncNeeded=true;

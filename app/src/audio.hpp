@@ -10,6 +10,8 @@ struct AudioStats {
  std::atomic<uint32_t> patternGeneration{0};   // the last queued pattern the audio swapped in
  std::atomic<int> usbChannels{0},usbFirmware{0},usbState{0},usbPort{0};
  std::atomic<float> usbBpm{0};std::atomic<bool> usbClock{false},usbRunning{false};
+ // Each FM1 track's pan as its CC 10 value (0 .. 127), -1 not heard yet (centred).
+ std::array<std::atomic<int>,6> usbPan{{-1,-1,-1,-1,-1,-1}};
  std::array<std::atomic<int>,12> fxStep{};
  std::array<std::atomic<float>,6> fxMeters{};
  // LIFEBLOOD: decaying peak of each vertex's output (0 IN, 1 OUT, 2..8 nodes, 9..14 FM1 tracks),

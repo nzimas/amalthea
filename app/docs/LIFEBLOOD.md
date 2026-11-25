@@ -40,8 +40,11 @@ Installs back these files up with the other banks.
 
 ### Session settings
 
-- **TEMPO** — for tempo-synced delays and modulation; external MIDI clock from
-  the FM1 overrides it, as in FX.
+- **TEMPO** — for tempo-synced delays and modulation. While the FM1's MIDI clock is
+  locked the row shows `EXT` and the FM1's tempo, the effects follow it, and the session's
+  own value cannot be dialled (it returns when the clock stops). The clock's tempo is
+  counted over the last two beats of pulses and rounded to a whole BPM, so pulses that
+  USB delivers in bursts do not read slow.
 - **PATH** — ABSTRACT or RHYTHMIC (after Vascular's guidance paths). RHYTHMIC grows
   cuts, gates, permutations and clockable textures (granular and loopers lean in; any
   effect with a SYNC switch is synced), keeps long reverb tails rare and keeps every
@@ -119,7 +122,12 @@ naturally; the next new network waits until that crossfade has finished.
 A firmware sending a stereo mix gives one IN. A firmware sending separate tracks (six,
 or three as Norilsk does) gives one input per track, drawn down the left edge and
 numbered; the output is always one stereo OUT. Each track enters at FX's default strip
-level of 80%, spread gently across the stereo field.
+level of 80%, placed where the FM1 pans it. The FM1 takes its USB stems before its pan,
+so LIFEBLOOD reads the pans from the FM1's MIDI: CC 10 on channel 1–6 is the pan of
+track 1–6 (BIGORNA sends it with GLOBAL SETUP > MIDI > SEND CC on and the default OUT
+channels), with the FM1's constant-power law, gliding over 50 ms. A track whose pan has
+not been received is centred. Pans received stay known while the appliance closes and
+reopens; another firmware starts centred again.
 
 LIFEBLOOD listens: a track counts as heard after any sample above -70 dBFS within the
 last 30 seconds, and silent tracks are dimmed. X and A route only heard tracks: each

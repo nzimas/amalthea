@@ -29,6 +29,17 @@ int main(int argc,char**argv){
  for(auto name:{"FM-1 Bigorna","FM-1 Tonitor","FM-1 Norilsk","FM-1 Lilliput"})check(fm1Firmware(name)>0,"all four product identities recognized");
  check(fm1Mapping(1,6).count==6&&fm1Mapping(3,3).count==3&&fm1Mapping(2,8).offset==2,"descriptor-based track routing");check(fm1Mapping(3,2).stereo&&fm1Mapping(3,2).count==1,"stereo mix never falsely split into separate tracks");
  MidiClock clock;clock.byte(0xfa,1);for(int n=1;n<=96;n++)clock.byte(0xf8,1+n*60./120/24);check(clock.locked&&clock.running&&std::abs(clock.bpm-120)<.01,"MIDI24ppqn clock locks to120");clock.byte(0xfc,3.1);check(!clock.running,"external Stop respected");clock.expire(5);check(!clock.locked,"missing clock expires for internal fallback");
+ {// USB delivers pulses in bursts (several at one timestamp): the tempo is still exact, and whole.
+  // Each pulse is stamped when the host next reads the port (every 2 ms), not when it was sent.
+  auto read=[](double t){return std::ceil(t/.002)*.002;};
+  MidiClock c;c.byte(0xfa,1);for(int n=1;n<=480;n++)c.byte(0xf8,read(1+n*60./127/24));
+  check(c.locked&&c.tempo==127&&std::abs(c.bpm-127)<.5,"bursts of USB MIDI pulses keep the FM1's tempo");
+  int held=c.tempo;double base=1+480*60./127/24;for(int n=1;n<=96;n++)c.byte(0xf8,read(base+n*60./127.4/24));check(c.tempo==held,"jitter under 0.6 BPM does not retune the effects");
+  base+=96*60./127.4/24;for(int n=1;n<=60;n++)c.byte(0xf8,read(base+n*60./90/24));check(c.tempo==90,"a tempo change on the FM1 is followed within a beat or two");}
+ {// The pan of each FM1 track arrives as CC 10 on channels 1 .. 6, running status and real time between.
+  MidiTrackPan p;for(uint8_t b:{0xB0,10,64,0xF8,10,0,0xB5,0x07,100,10,127,0x93,60,100,0xBA,10,5})p.byte(b);
+  check(p.pan[0]==0&&p.pan[5]==127&&p.pan[1]==-1&&p.pan[3]==-1,"track pans from CC 10, others not yet heard");
+  check(midiPanPosition(64)==.5f&&midiPanPosition(0)==0&&midiPanPosition(127)==1,"CC 10 64 is the centre");}
  Editor e;e.page=Page::Appliances;e.applianceItem=1;e.action(Action::Enter);check(e.inFx()&&e.fxRack,"FX starts on channel strips");
  e.action(Action::RandomizeColumn);check(e.fxRack->slots[0].effect.type!=FxType::None&&e.fxRack->slots[1].effect.type==FxType::None,"plain hold chooses only the selected slot's effect type");
  check(e.notice==fxName(e.fxRack->slots[0].effect.type)&&e.noticeMs==1500,"slot randomize names the effect in a 1.5 s overlay");e.notice.clear();
