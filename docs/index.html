@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Amalthea — a custom Linux distribution for the TRIMUI Brick</title>
-<meta name="description" content="Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with a platform for musical instruments: so far a generative tracker, an effect rack and a living effect network for the M-VAVE FM-1.">
+<meta name="description" content="Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with a platform for musical instruments: shared engines, effects and generators, and new instruments with every build.">
 <meta property="og:title" content="Amalthea — a custom Linux distribution for the TRIMUI Brick">
-<meta property="og:description" content="Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with a platform for musical instruments: so far a generative tracker, an effect rack and a living effect network for the M-VAVE FM-1.">
+<meta property="og:description" content="Amalthea: a custom Linux distribution that replaces the TRIMUI Brick's firmware with a platform for musical instruments: shared engines, effects and generators, and new instruments with every build.">
 <meta property="og:image" content="https://nzimas.github.io/amalthea/assets/screens/home.png">
 <link rel="icon" href="assets/mark.svg?v=c5518fa3a0" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,25 +50,31 @@
   <p class="eyebrow">TRIMUI Brick · Musical instruments</p>
   <h1>Turn your TrimUI Brick into multiple instruments</h1>
   <p>Amalthea is <b>not an app on top of the stock firmware</b>. It replaces the Brick's operating system with
-    Amalthea Linux, a minimal distribution built for one purpose: musical instruments, running with the lowest
-    latency and the steadiest audio the hardware allows. The gaming frontend, the emulators and the rest of the stock
+    Amalthea Linux, a minimal distribution built for one purpose: a platform for musical instruments, running
+    them with the lowest latency and the steadiest audio the hardware allows. The gaming frontend, the emulators and the rest of the stock
     system are gone, and nothing else competes for the processor.</p>
   <p>Amalthea nursed Zeus; in the tradition where she is the goat herself, one of her horns became the cornucopia,
-    the horn of plenty. Amalthea is also Jupiter's red moon. The system offers plenty: a twelve-track generative
-    tracker, an effect rack and a living effect network for the M-VAVE FM-1, twelve synthesis engines and more than
-    seventy effects.</p>
+    the horn of plenty. Amalthea is also Jupiter's red moon. The platform offers plenty: synthesis engines, more
+    than seventy effects, generators and a master chain, shared by every instrument and used by each in its own way.
+    New instruments arrive with new builds.</p>
   <div class="cta">
     <a class="btn primary" href="install.html">Install</a>
     <a class="btn" href="manual.html">Read the manual</a>
     <a class="btn" href="screens.html">See the screens</a>
   </div>
   <img class="hero-shot" src="assets/screens/home.png" width="1024" height="768"
-       alt="The Amalthea home screen on the Brick: the TRACKER, FX and LIFEBLOOD tiles and the battery charge">
+       alt="The Amalthea home screen on the Brick, with a tile for each instrument and the battery charge">
 </div>
 
-<h2 id="instruments">The instruments</h2>
-<p>Amalthea is a platform: these are its first instruments, and more will arrive with new builds. Choose one on
-  the home screen. Every one starts blank and stopped; nothing is saved or recalled behind your back.</p>
+<h2 id="platform">A platform for instruments</h2>
+<p>Amalthea is built to host a growing fleet of instruments. Underneath all of them sit the same resources: the
+  synthesis engines, the effects, the generators, the master chain, the session banks and the audio and USB stack.
+  Each instrument puts them to a different use: one sequences the engines, another runs effects over external audio,
+  another grows networks of effects. New instruments arrive with new builds, and the installer adds them in place.</p>
+
+<h2 id="instruments">On the platform today</h2>
+<p>Choose an instrument on the home screen. Every one starts blank and stopped; nothing is saved or recalled behind
+  your back.</p>
 <div class="machines">
   <article class="machine tracker">
     <img src="assets/screens/tracker.png" width="1024" height="768" alt="The Tracker's pattern page" loading="lazy">
@@ -122,18 +128,18 @@
   </figure>
 </div>
 
-<h2 id="features">At a glance</h2>
+<h2 id="features">Shared resources</h2>
 <dl class="features">
   <dt>Twelve engines</dt><dd>VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT, CALIGULA and FM
-    DRUM; each track has its own twelve instruments.</dd>
+    DRUM. In the Tracker, each track has its own twelve sounds.</dd>
   <dt>Generators</dt><dd>Melodic idioms, drum patterns, euclidean rhythms, sounds, effects and their parameters,
     drawn with X at the density you set; fresh entropy on every start. FUNC + hold X gives every step its own
     variation of its instrument's sound, with the pitch untouched.</dd>
   <dt>Inserts</dt><dd>More than seventy, shared by every instrument: drives and destruction, filters, delays,
     reverbs, granular, resonators, cuts and repeats, spectral effects, vocoders. Values in real units.</dd>
   <dt>Master</dt><dd>ABRASION, CORROSION, MODULATION, compressor, delay and reverb, with sends from every track.</dd>
-  <dt>Banks</dt><dd>32 patterns per session and 64 sessions in the Tracker; 64 FX sessions; 64 LIFEBLOOD sessions
-    with 32 snapshots each. Saved only when you save.</dd>
+  <dt>Banks</dt><dd>Every instrument has its own bank of 64 sessions (the Tracker with 32 patterns per session,
+    LIFEBLOOD with 32 snapshots). Saved only when you save.</dd>
   <dt>FM-1 host</dt><dd>The Brick powers and hosts an M-VAVE FM-1 over USB-C: Bigorna, Tonitor and Lilliput's six
     tracks, Norilsk's three, and the FM-1's MIDI clock.</dd>
   <dt>USB audio out</dt><dd>Plugged into a computer or phone, the Brick is a class-compliant stereo audio input.</dd>
