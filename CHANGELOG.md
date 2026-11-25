@@ -1,3 +1,22 @@
+## Build 37 — Instrument row variations
+
+- FUNC + hold X on the INSTRUMENT column gives every row holding an instrument its own
+  random variation of that instrument's sound: the same patch family with redrawn
+  non-pitch parameters (timbre, filter, envelopes, modulation and effect amounts), for
+  every engine. Pitch, tuning, detune, FM ratios, glide, pitch envelopes / modulation and
+  drum tuning never change, nor does the output level. Rows with an instrument can hold
+  one instrument or several. A small square marks a varied row.
+- With rows selected (FUNC + F1 / F2) only those rows vary; while editing an INST cell,
+  FUNC + hold X varies that row only. At most 16 distinct variations per track: rows past
+  the 16th reuse their instrument's earlier ones. Undo restores; hold X on INST (a new
+  track sound) clears the column's variations; ERASE or choosing another instrument
+  clears a row's.
+- Each variation is cooked once on the UI thread into a bounded pool shared across
+  tracks; native and PERC voices start a fresh voice for a different variation and the
+  previous one releases (tails stay bounded per track).
+- Sessions are AMAL24 (the per-row variation seeds); AMAL23 and older load without
+  variations.
+
 ## Build 36 — LIFEBLOOD snapshot repair
 
 - A snapshot stored while angiogenesis was absorbing a node kept vessels to that node,

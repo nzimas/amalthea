@@ -390,6 +390,45 @@ void Editor::randomizeBlankPatches() {
   // A blank session opens with every track's instrument already drawn.
   for(int t=0;t<Tracks;t++)editTrackPatch(project,t,project.tracks[t].instrument).seed=freshSeed();
 }
+void Editor::varyInstrumentRows(){
+  auto &t=project.tracks[track];
+  const int length=columnLength(t,1);
+  const int first=hasSelection()?selectionFirst():0,last=hasSelection()?std::min(selectionLast(),length-1):length-1;
+  int rows=0;for(int r=first;r<=last;r++)rows+=t.steps[r].instrument<Instruments;
+  if(!rows){say("NO INSTRUMENTS ON ROWS");++noticeSerial;status="PLACE INSTRUMENTS FIRST (HOLD X)";return;}
+  checkpoint();
+  uint32_t seed=freshSeed()|1u;
+  // Up to VariationsPerTrack distinct draws; a later row reuses (in turn) the earlier
+  // draws of its own instrument, so a long column never needs more prepared sounds.
+  std::array<uint8_t,VariationsPerTrack> slots{};std::array<uint32_t,VariationsPerTrack> drawn{};int count=0;
+  std::array<int,Instruments> reuse{};std::array<bool,Instruments> used{};
+  for(int r=first;r<=last;r++){
+    auto &s=t.steps[r];
+    if(s.instrument>=Instruments){s.variation=0;continue;}
+    used[s.instrument]=true;
+    if(count<VariationsPerTrack){
+      uint32_t v=0;while(!v)v=randomNext(seed);
+      s.variation=v;slots[count]=s.instrument;drawn[count++]=v;continue;
+    }
+    int matches=0;for(int k=0;k<count;k++)matches+=slots[k]==s.instrument;
+    s.variation=0;if(!matches)continue;
+    int pick=reuse[s.instrument]++%matches;
+    for(int k=0;k<count;k++)if(slots[k]==s.instrument&&pick--==0){s.variation=drawn[k];break;}
+  }
+  int instruments=0;for(bool u:used)instruments+=u;
+  selectAnchor=-1;
+  notice="INSTRUMENT ROWS VARIED";
+  noticeDetail=std::to_string(rows)+(rows==1?" ROW / ":" ROWS / ")+std::to_string(instruments)+(instruments==1?" INSTRUMENT":" INSTRUMENTS")+" - PITCH KEPT";
+  noticeMs=1600;noticeDetailSerial=++noticeSerial;
+  status="ROW VARIATIONS DRAWN - UNDO AVAILABLE";
+}
+void Editor::varyPendingInstrument(){
+  if(pending.instrument>=Instruments){say("CHOOSE AN INSTRUMENT FIRST");++noticeSerial;return;}
+  if(!eventRandomSeed)eventRandomSeed=0x9e3779b9u;   // (xorshift never leaves zero)
+  uint32_t v=0;while(!v)v=randomNext(eventRandomSeed);
+  pending.variation=v;eventRandomized=true;
+  say("ROW VARIATION DRAWN - PITCH KEPT");++noticeSerial;
+}
 void Editor::randomizeColumn() {
   checkpoint();
   auto &t = project.tracks[track];
@@ -400,7 +439,8 @@ void Editor::randomizeColumn() {
     auto slot = int(t.instrument);
     auto &patch = editTrackPatch(project,track,slot);
     patch.seed = freshSeed();
-    for(int r=0;r<length;r++)t.steps[r].instrument=uint8_t(slot);
+    // A new sound is heard as drawn: the column's row variations are cleared with it.
+    for(int r=0;r<length;r++){t.steps[r].instrument=uint8_t(slot);t.steps[r].variation=0;}
     status = std::string(instrumentName(patch.engine)) + " / " + patchFamily(patch) + " - UNDO AVAILABLE";
     notice="INSTRUMENT "+std::to_string(slot+1)+" RANDOMIZED";
     noticeDetail=std::string(instrumentName(patch.engine))+" / "+patchFamily(patch);
@@ -437,7 +477,7 @@ void Editor::randomizeColumn() {
         for(int p=0;p<NoteParameters;p++)s.locks[p]=!active[r]?Inherit:p==NoteVolume?10+randomNext(project.seed)%91:randomNext(project.seed)%101;
       }
     } else if(column==1) {
-      s.instrument=active[r]?randomNext(project.seed)%Instruments:NoInstrument;
+      s.instrument=active[r]?randomNext(project.seed)%Instruments:NoInstrument;s.variation=0;
     } else if(column<4) {
       auto &f=s.fx[column-2];f={};
       if(active[r]) {
@@ -462,7 +502,8 @@ void Editor::randomizeColumn() {
     for(auto type:placed){Effect e{type,0};randomizeFxParameters(e,t.inserts[column-2],project.seed);}
     drawn=int(placed.size());
   }
-  if(column==0)for(int r=0;r<columnLength(t,1);r++)t.steps[r].instrument=t.instrument;
+  // (A row already on the track instrument keeps its variation.)
+  if(column==0)for(int r=0;r<columnLength(t,1);r++){auto &s=t.steps[r];if(s.instrument!=t.instrument){s.instrument=t.instrument;s.variation=0;}}
   if(column==1){
     // Shift draws which instruments play; their sounds stay as they are.
     std::array<bool,Instruments> used{};for(int r=0;r<length;r++)if(t.steps[r].instrument<Instruments)used[t.steps[r].instrument]=true;
@@ -483,7 +524,7 @@ void Editor::rotateColumn(int direction){
   for(int r=0;r<length;r++){
     const Step &from=t.steps[r];Step &to=rotated[((r+direction)%length+length)%length];
     if(c==0){to.note=from.note;to.length=from.length;to.locks=from.locks;}
-    else if(c==1)to.instrument=from.instrument;
+    else if(c==1){to.instrument=from.instrument;to.variation=from.variation;}
     else if(c<4)to.fx[c-2]=from.fx[c-2];
     else to.modifier=from.modifier;
     eventCondition(to,c)=eventCondition(from,c);
@@ -497,7 +538,7 @@ void Editor::eraseCell(){
   for(int r=selectionFirst();r<=selectionLast();r++){
     Step &s=t.steps[r];
     if(column==0){s.note=-1;s.length=1;s.locks.fill(Inherit);}
-    else if(column==1)s.instrument=NoInstrument;
+    else if(column==1){s.instrument=NoInstrument;s.variation=0;}
     else if(column<4)s.fx[column-2]={};
     else s.modifier={};
     eventCondition(s,column)={};
@@ -516,7 +557,10 @@ void Editor::applyToSelection(){
       if(p.note!=o.note)s.note=p.note;
       if(p.length!=o.length)s.length=p.length;
       for(int k=0;k<NoteParameters;k++)if(p.locks[k]!=o.locks[k])s.locks[k]=p.locks[k];
-    }else if(column==1){if(p.instrument!=o.instrument)s.instrument=p.instrument;}
+    }else if(column==1){
+      if(p.instrument!=o.instrument){s.instrument=p.instrument;s.variation=p.variation;}
+      else if(p.variation!=o.variation&&s.instrument!=NoInstrument)s.variation=p.variation;
+    }
     else if(column<4){
       int k=column-2;
       if(p.fx[k].type!=o.fx[k].type)s.fx[k].type=p.fx[k].type;
@@ -550,7 +594,7 @@ void Editor::randomizeEventParameter(bool wholeColumn){
     else if(column==0){if(s.note>=0||emptyNote){int center=s.note>=0?s.note:60;std::array<int,25> choices{};int count=0;
       for(int n=std::max(0,center-12);n<=std::min(119,center+12);n++)if(scaleNote(60+n%12,project)==60+n%12)choices[count++]=n;
       if(count)s.note=choices[next()%count];}}
-    else if(column==1)s.instrument=next()%Instruments;
+    else if(column==1){auto before=s.instrument;s.instrument=next()%Instruments;if(s.instrument!=before)s.variation=0;}
     else if(column<4){auto &f=s.fx[column-2];if(f.type!=FxType::None)f.value=next()%101;}
     else s.modifier.semitones=int(next()%49)-24;
   };
@@ -559,7 +603,7 @@ void Editor::randomizeEventParameter(bool wholeColumn){
     else if(lengthTab()){if(column==0)to.length=from.length;else to.fx[column-2].length=from.fx[column-2].length;}
     else if(lockTab()>=0)to.locks[lockTab()]=from.locks[lockTab()];
     else if(column==0)to.note=from.note;
-    else if(column==1)to.instrument=from.instrument;
+    else if(column==1){to.instrument=from.instrument;to.variation=from.variation;}
     else if(column<4)to.fx[column-2].value=from.fx[column-2].value;
     else to.modifier.semitones=from.modifier.semitones;
   };
@@ -865,6 +909,12 @@ void Editor::dispatch(Action a) {
     noticeDetail=std::string(instrumentName(patch.engine))+" / "+patchFamily(patch);
     noticeMs=1200;noticeDetailSerial=++noticeSerial;return;
   }
+  // FUNC + hold X on the instrument column: per-row variations of the rows' instruments
+  // (pitch and tuning kept). With rows selected, only those rows; editing, the edited row.
+  if(shift2&&!shift&&!mixer&&page==Page::Pattern&&column==1&&a==Action::RandomizeColumn){
+    if(editing)varyPendingInstrument();else varyInstrumentRows();
+    return;
+  }
   if(editing&&page==Page::Pattern&&(a==Action::RandomizerOptions||a==Action::RandomizeColumn)){
     if(a==Action::RandomizerOptions)randomizeEventParameter(false);
     else if(fxColumn()){if(shift)randomizePendingEffect();else randomizePendingParameters();}
@@ -1046,9 +1096,11 @@ void Editor::dispatch(Action a) {
       else if (column == 0){
         pending.note = std::clamp(int(pending.note) + d, -3, 119);
       }
-      else if (column == 1)
+      else if (column == 1){
         pending.instrument =
             uint8_t(std::clamp((pending.instrument==NoInstrument?-1:int(pending.instrument)) + d, -1, Instruments - 1));
+        if(pending.instrument!=before.instrument)pending.variation=0;   // a variation belongs to its instrument
+      }
       else if (column == 4) {
         pending.modifier.semitones=std::clamp(int(pending.modifier.semitones)+d,-24,24);
         pending.modifier.conditionalOnly=true;
@@ -1228,7 +1280,12 @@ std::vector<uint8_t> encodeProject(const Project &p) {
   // with more effects (or wider profiles) still read this payload.
   put(b,NativeCount,1);put(b,NativeParams,1);
   for(const auto&t:p.tracks)for(const auto&i:t.inserts)for(const auto&profile:i.native)for(auto v:profile)put(b,v,1);
-  std::vector<uint8_t> h={'A','M','A','L',23,0,0,0};put(h,crc(b),4);h.insert(h.end(),b.begin(),b.end());return h;
+  // AMAL24: per-row instrument variations (FUNC + hold X on the INSTRUMENT column), sparse:
+  // their count, then track, row (two bytes) and seed for each varied row.
+  {int count=0;for(const auto&t:p.tracks)for(const auto&s:t.steps)count+=s.variation&&s.instrument<Instruments;
+   put(b,count,2);
+   for(int tr=0;tr<Tracks;tr++)for(int r=0;r<MaxRows;r++){const auto&s=p.tracks[tr].steps[r];if(s.variation&&s.instrument<Instruments){put(b,tr,1);put(b,r,2);put(b,s.variation,4);}}}
+  std::vector<uint8_t> h={'A','M','A','L',24,0,0,0};put(h,crc(b),4);h.insert(h.end(),b.begin(),b.end());return h;
 }
 bool saveProject(const Project &p,const std::string &path,std::string &err){
   auto b=encodeProject(p);
@@ -1264,15 +1321,16 @@ bool loadProject(Project &out, const std::string &path, std::string &err) {
   return decodeProject(out,b,err);
 }
 bool decodeProject(Project &out,const std::vector<uint8_t>&b,std::string &err){
+  constexpr size_t VariationBytes=2+size_t(Tracks)*MaxRows*7;   // (the most a sparse AMAL24 tail can hold)
   auto size=std::streamoff(b.size());
   constexpr size_t legacySize = 12 + 8 + Tracks * (3 + MaxRows * 11);
   constexpr size_t extra = 2 + Instruments * 5 + MasterModules;
   constexpr size_t macroBytes=MacroCount*MacroParameters+Tracks*(MacroCount+1+MacroCount*MacroParameters);
-  if(size<std::streamoff(legacySize)||size>std::streamoff(legacySize+extra+MasterModules*3+Tracks*6+Tracks*2*InsertSettingsBytes+Tracks*6*3+4+Tracks*2*7+4+macroBytes+EventConditionBytes+TrackPatchBytes+NoteLockBytes+FilterSettingsBytes+PortSettingsBytes+2+Tracks*MaxRows+Tracks*MaxRows*2+ModulationSettingsBytes+2+Tracks*2*255*255)){
+  if(size<std::streamoff(legacySize)||size>std::streamoff(legacySize+extra+MasterModules*3+Tracks*6+Tracks*2*InsertSettingsBytes+Tracks*6*3+4+Tracks*2*7+4+macroBytes+EventConditionBytes+TrackPatchBytes+NoteLockBytes+FilterSettingsBytes+PortSettingsBytes+2+Tracks*MaxRows+Tracks*MaxRows*2+ModulationSettingsBytes+2+Tracks*2*255*255+VariationBytes)){
     err="INVALID PROJECT SIZE";return false;
   }
   if (b.size() != size || std::string(b.begin(), b.begin() + 4) != "AMAL" ||
-      (b[4] < 1 || b[4] > 23) || b[5] || b[6] || b[7]) {
+      (b[4] < 1 || b[4] > 24) || b[5] || b[6] || b[7]) {
     err = "INVALID PROJECT OR VERSION";
     return false;
   }
@@ -1284,7 +1342,10 @@ bool decodeProject(Project &out,const std::vector<uint8_t>&b,std::string &err){
   // AMAL23 ends with the native profiles: their count and width, then the values.
   size_t nativeCount=0,nativeWidth=0;
   if(b[4]>=23){if(versionSize+2>b.size()){err="VERSION SIZE MISMATCH";return false;}nativeCount=b[versionSize];nativeWidth=b[versionSize+1];}
-  if (size != std::streamoff(versionSize+(b[4]>=23?2+Tracks*2*nativeCount*nativeWidth:0))) {
+  const size_t nativeEnd=versionSize+(b[4]>=23?2+Tracks*2*nativeCount*nativeWidth:0);
+  size_t variationCount=0;
+  if(b[4]>=24){if(nativeEnd+2>b.size()){err="VERSION SIZE MISMATCH";return false;}variationCount=b[nativeEnd]|size_t(b[nativeEnd+1])<<8;}
+  if (size != std::streamoff(nativeEnd+(b[4]>=24?2+variationCount*7:0))) {
     err = "VERSION SIZE MISMATCH"; return false;
   }
   size_t i = 8;
@@ -1424,6 +1485,9 @@ bool decodeProject(Project &out,const std::vector<uint8_t>&b,std::string &err){
   // AMAL23: native profiles; effects or values this build lacks are skipped, missing ones keep defaults.
   if(b[4]>=23){get(2);for(auto&t:p.tracks)for(auto&ins:t.inserts)for(size_t k=0;k<nativeCount;k++)for(size_t v=0;v<nativeWidth;v++){
     auto x=get(1);ok &= x<=100;if(k<size_t(NativeCount)&&v<size_t(NativeParams))ins.native[k][v]=uint8_t(x);}}
+  // AMAL24: row variations; a variation without an instrument on its row means nothing.
+  if(b[4]>=24){get(2);for(size_t k=0;k<variationCount;k++){auto tr=get(1),r=get(2),v=get(4);ok &= tr<uint32_t(Tracks)&&r<uint32_t(MaxRows);
+    if(tr<uint32_t(Tracks)&&r<uint32_t(MaxRows)&&p.tracks[tr].steps[r].instrument<Instruments)p.tracks[tr].steps[r].variation=v;}}
   if (!ok) {
     err = "PROJECT VALUES OUT OF RANGE";
     return false;

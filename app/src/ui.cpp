@@ -493,6 +493,9 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
         txt(left[col] + 8, y + (e.visibleRows == 8 ? 12 : 0), val,
             e.visibleRows == 8 ? 38 : 32,
             sel && col == e.column ? BG : FG);
+        // A varied row (FUNC + hold X): a small square after its instrument number.
+        if(col==1&&step.variation&&step.instrument!=NoInstrument)
+          rect(left[col]+widths[col]-24,y+rh/2-5,10,10,sel&&col==e.column?BG:accent);
       }
     }
   }
@@ -538,6 +541,7 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
       auto slot=effectiveInstrument(e.project.tracks[e.track],e.pending);
       value=std::to_string(slot+1)+" "+instrumentName(trackPatch(e.project,e.track,slot).engine);
       description=e.pending.instrument==NoInstrument?"TRACK DEFAULT / "+std::string(patchFamily(trackPatch(e.project,e.track,slot))):patchFamily(trackPatch(e.project,e.track,slot));
+      if(e.pending.instrument!=NoInstrument&&e.pending.variation)description+=" / ROW VARIATION";
     } else if(e.column<4) {
       auto fx=e.pending.fx[e.column-2];
       label(248,20,488,fxName(fx.type),32,FG);

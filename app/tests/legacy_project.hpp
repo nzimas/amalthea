@@ -3,6 +3,7 @@
 namespace amalthea {
 constexpr int LegacyTrackPatchBytes=Tracks*(1+8*5);
 inline std::vector<uint8_t> legacyBankBytes(std::vector<uint8_t> b) {
+ if(b[4]>=24)b.resize(b.size()-2); // row variations (AMAL24; fixtures hold none)
  if(b[4]>=23)b.resize(b.size()-2-Tracks*2*NativeCount*NativeParams); // native profiles (AMAL23)
  if(b[4]>=22)b.resize(b.size()-ModulationSettingsBytes); // flanger/phaser profiles
  if(b[4]>=21)b.resize(b.size()-Tracks*MaxRows*2); // FX lengths
@@ -34,6 +35,7 @@ inline std::vector<uint8_t> legacyBankBytes(std::vector<uint8_t> b) {
 }
 // A current (AMAL18, 12-slot) payload rewritten as AMAL17 with eleven instrument slots.
 inline std::vector<uint8_t> elevenSlotBytes(std::vector<uint8_t> b) {
+ if(b[4]>=24)b.resize(b.size()-2); // row variations (AMAL24; fixtures hold none)
  if(b[4]>=23)b.resize(b.size()-2-Tracks*2*NativeCount*NativeParams); // native profiles (AMAL23)
  if(b[4]>=22)b.resize(b.size()-ModulationSettingsBytes); // flanger/phaser profiles (AMAL22)
  if(b[4]>=21)b.resize(b.size()-Tracks*MaxRows*2); // FX lengths (AMAL21)

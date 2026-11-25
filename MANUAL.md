@@ -117,6 +117,7 @@ X is the generator, everywhere in the Tracker.
 | Draw NOTE with conditions, pan, volume and sends | Shift + hold X on NOTE |
 | New sound for the track's instrument (written on every INST row) | Hold X on INST; an overlay names it |
 | Random instrument slots per step | Shift + hold X on INST |
+| A variation of each row's instrument (pitch kept) | FUNC + hold X on INST |
 | Draw the FX column: effects, mixes and their parameters | Hold X on FX1 / FX2 |
 | The same, with positive trigger conditions | Shift + hold X on FX1 / FX2 |
 | While editing a cell: new value for the shown tab only | Tap X (auditioned; Enter keeps it) |
@@ -155,6 +156,15 @@ value overrides it for that column only. Columns with the same length, rate and 
 
 Each track has its own twelve instrument slots, one engine each; editing a sound on one track never changes
 another track.
+
+**Row variations.** FUNC + hold X on INST gives every row that holds an instrument its own variation of that
+instrument's sound: the same family, with its timbre, filter, envelopes and modulation and effect amounts redrawn
+for that row. Pitch, tuning, detune, FM ratios, glide, pitch envelopes and modulation, drum tuning and the output
+level never change, so the notes play exactly as written. A small square after the slot number marks a varied
+row. With rows selected (FUNC + F1 / F2) only those rows vary; while editing an INST cell, only that row. A track
+holds up to 16 distinct variations (later rows of a longer column reuse their instrument's). Undo restores; hold
+X on INST draws a new sound and clears the column's variations; ERASE or another instrument clears a row's.
+Variations are saved with sessions and patterns.
 
 | Slot | Engine | Character |
 | --- | --- | --- |

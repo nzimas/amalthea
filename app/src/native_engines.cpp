@@ -45,11 +45,15 @@ struct Cooked {
  template<class T>const T &as()const{return *reinterpret_cast<const T*>(recipe);}
 };
 static_assert(sizeof(vr::Patch)<48000&&sizeof(Cooked)<=ENG_CK_MAX,"native recipe storage");
-va::Design animaRecipe(int f,uint32_t seed,float *sliders){
- static const int base[]={0,1,2,3,4,5,6,7,0,4,5,0,1,2,6,0,5,3,1,0,5,4,1,0,7,4,7,2,4,1,2,5};
- auto d=va::design(base[f],seed);va::route(d,seed^0x517cc1u);va::Random r(seed);
+void animaSliders(va::Random &r,float *sliders){
  for(int i=0;i<8;i++)sliders[i]=r.in(.25f,.9f);
  sliders[0]=r.in(.35f,.85f);sliders[6]=r.in(.3f,.75f);sliders[7]=r.in(.4f,.95f);
+}
+// The design before the sliders are applied; cook applies them.
+va::Design animaDraw(int f,uint32_t seed,float *sliders){
+ static const int base[]={0,1,2,3,4,5,6,7,0,4,5,0,1,2,6,0,5,3,1,0,5,4,1,0,7,4,7,2,4,1,2,5};
+ auto d=va::design(base[f],seed);va::route(d,seed^0x517cc1u);va::Random r(seed);
+ animaSliders(r,sliders);
  if(f>=8){
   d.fingers=2+r.below(5);d.motion=va::MotionStyle(r.below(6));d.travel=r.in(.08f,.8f);
   switch(f){
@@ -63,7 +67,7 @@ va::Design animaRecipe(int f,uint32_t seed,float *sliders){
   if(f==17){d.att=2;d.dec=250;d.sus=.1f;d.rel=350;}
   if(f==31){d.noise=4;d.ampMod=true;d.amRate=va::M(va::Speed,3.f,70.f);d.amDepth=va::M(va::Y,.3f,.95f);}
  }
- return va::applySliders(d,sliders);
+ return d;
 }
 vr::Patch resurgentRecipe(int f,uint32_t seed){
  vr::Patch p;va::Random r(seed);p.g[vr::G_volume]=-9;p.g[vr::G_scenemode]=f>=30?2:0;
@@ -92,16 +96,129 @@ vr::Patch resurgentRecipe(int f,uint32_t seed){
  if(f%4==2){p.g[vr::G_fx1_type]=3;p.g[vr::G_fx1_p0]=-.2f;p.g[vr::G_fx1_p1]=.4f;p.g[vr::G_fx1_p3]=-1.5f;p.g[vr::G_fx1_p4]=.65f;p.g[vr::G_fx1_p6]=.25f;p.g[vr::G_fx1_p8]=4;p.g[vr::G_fx1_p9]=.4f;}
  return p;
 }
+// --- per-row variations -------------------------------------------------------
+// val[1] is a variation seed; 0 cooks the patch exactly as drawn. A variation
+// moves the patch's non-pitch parameters part of the way toward a second draw
+// from the same family's own ranges (so it keeps the family's character),
+// never anything that sets or modulates pitch, the output level, or the
+// structural counts that decide CPU cost.
+template<class T>T toward(T base,T target,float a){return base+(target-base)*T(a);}
+template<class T>T towardLog(T base,T target,float a){return base>0&&target>0?base*std::pow(target/base,T(a)):base;}
+// Keeps a varied slider on the same side of a threshold the base sits on, so a
+// variation never brings in or takes out an object the slider switches.
+inline void sameSide(float &v,float base,float edge){if(base<=edge)v=std::min(v,edge);else v=std::max(v,edge+1e-4f);}
+inline uint64_t variationSeed(int e,uint32_t var){return (uint64_t(var)<<8|uint64_t(e))^0xa11a7e5eedull;}
+void bayDraw(va::Random &r,int f,double *sliders,vb::Params &p){
+ for(int i=0;i<8;i++)sliders[i]=r.in(.15f,.9f);sliders[4]=r.in(.4f,.85f);sliders[5]=r.in(.15f,.65f);sliders[6]=r.in(.03f,.32f);sliders[7]=r.in(.25f,.8f);
+ if(f%6==0){sliders[1]=r.in(.6f,1.f);sliders[2]=r.in(.5f,.95f);}if(f%6==1){sliders[0]=r.in(.1f,.5f);sliders[5]=r.in(.5f,.85f);}if(f%6==2){sliders[3]=r.in(.5f,.95f);sliders[5]=r.in(.1f,.3f);}if(f>=18){p.attack=r.in(.06f,.4f);p.asr=true;}
+ sliders[0]=std::clamp(sliders[0]*.5+(f%4)*.15,0.,1.);sliders[1]=std::clamp(sliders[1]*.5+(f/4%3)*.2,0.,1.);sliders[2]*=f%2?.9:.35;sliders[3]*=f%3==0?1.:.35;
+}
+void caligulaDraw(va::Random &r,int f,float *s){
+ for(int i=0;i<8;i++)s[i]=r.in(.3f,.8f);s[0]=.5f;int profile=f/8;if(profile==1){s[1]=r.in(.5f,.9f);s[2]=r.in(.6f,.95f);s[5]=r.in(.2f,.6f);}if(profile==2){s[3]=r.in(.1f,.5f);s[6]=r.in(.55f,.85f);s[7]=r.in(.55f,.9f);}
+}
+void russoloDraw(va::Random &r,float *s){s[0]=r.in(.12f,.92f);s[1]=r.in(.12f,.92f);s[2]=r.in(.4f,.95f);s[3]=r.in(.1f,.8f);}
+// RUSSOLO's two knobs mean something different in every algorithm; most set
+// an oscillator's or a playback's rate, which is pitch. Only the families
+// whose knob is a probability, density, filter, envelope or slow clock vary.
+const bool russoloPot1[45]={0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1,1,1,0,0,0,0,0,0,0,0,0};
+const bool russoloPot2[45]={1,1,1,1,1,0,0,1,1,0,1,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0};
+// RESURGENT: which of an oscillator's param0..param6 are timbre for its type.
+// Sync, formant/window read, FM ratios and offsets, string detune and stiffness,
+// Twist harmonics/timbre, unison detune and voice count stay as drawn, as do
+// the discrete shape/engine/mode selectors.
+int resurgentOscMask(int type){
+ static const uint8_t mask[12]={0x0f,0x1e,0x17,0x0f,0x00,0x55,0x65,0x19,0x0f,0x2c,0x78,0x1e};
+ return type>=0&&type<12?mask[type]:0;
+}
+void varyAnima(va::Design &d,const va::Design &base,va::Random &rv){
+ auto hz=[&](va::Map &m,float oct){float k=std::exp2(rv.in(-oct,oct));m.lo=std::clamp(m.lo*k,20.f,18000.f);m.hi=std::clamp(m.hi*k,20.f,18000.f);};
+ auto mul=[&](va::Map &m,float lo,float hi){float k=rv.in(lo,hi);m.lo*=k;m.hi*=k;};
+ hz(d.cutoff,.5f);hz(d.noiseCut,.5f);hz(d.groupCut,.5f);
+ mul(d.q,.75f,1.3f);d.q.lo=std::clamp(d.q.lo,.5f,16.f);d.q.hi=std::clamp(d.q.hi,.5f,16.f);
+ mul(d.groupQ,.75f,1.3f);d.groupQ.lo=std::max(d.groupQ.lo,.5f);d.groupQ.hi=std::max(d.groupQ.hi,.5f);
+ mul(d.fmIndex,.7f,1.3f);
+ mul(d.amRate,.7f,1.4f);mul(d.amDepth,.7f,1.3f);d.amDepth.lo=std::clamp(d.amDepth.lo,0.f,1.f);d.amDepth.hi=std::clamp(d.amDepth.hi,0.f,1.f);
+ {float k=rv.in(.7f,1.3f);d.shaperDrive.lo=std::max(1.f,1.f+(d.shaperDrive.lo-1.f)*k);d.shaperDrive.hi=std::max(1.f,1.f+(d.shaperDrive.hi-1.f)*k);}
+ mul(d.phaserRate,.7f,1.4f);mul(d.phaserDepth,.75f,1.25f);
+ {float k=rv.in(-.06f,.06f);d.resFeedback.lo=std::clamp(d.resFeedback.lo+k,0.f,.92f);d.resFeedback.hi=std::clamp(d.resFeedback.hi+k,0.f,.92f);}
+ mul(d.resMix,.75f,1.25f);d.resMix.lo=std::clamp(d.resMix.lo,0.f,.6f);d.resMix.hi=std::clamp(d.resMix.hi,0.f,.6f);
+ if(d.down){float k=std::exp2(rv.in(-.4f,.4f));d.downRate.lo=std::clamp(d.downRate.lo*k,2000.f,48000.f);d.downRate.hi=std::clamp(d.downRate.hi*k,2000.f,48000.f);}
+ d.att*=std::exp2(rv.in(-.5f,.5f));d.dec*=std::exp2(rv.in(-.5f,.5f));d.rel*=std::exp2(rv.in(-.4f,.4f));d.sus=std::clamp(d.sus*rv.in(.8f,1.2f),0.f,1.f);
+ d.travel*=std::exp2(rv.in(-.5f,.5f));
+ d.lfo1=toward(d.lfo1,rv.in(.1f,.6f),rv.in(.3f,.7f));d.lfo2=toward(d.lfo2,rv.in(.03f,.12f),rv.in(.3f,.7f));
+ // Pinned to the base: the objects, their waveforms, every interval, ratio,
+ // detune, stack step, octave and grain scatter (pitch); grain rate and length,
+ // stack count, fingers and touch rates (CPU); amplitude and output (level).
+ d.oscA=base.oscA;d.oscB=base.oscB;d.fm=base.fm;d.multi=base.multi;d.gran=base.gran;d.noise=base.noise;
+ d.tableA=base.tableA;d.tableB=base.tableB;d.tableFM=base.tableFM;d.tableMulti=base.tableMulti;d.tableGran=base.tableGran;d.tableAM=base.tableAM;
+ d.intervalB=base.intervalB;d.detuneB=base.detuneB;d.fmRatio=base.fmRatio;d.golden=base.golden;d.multiCount=base.multiCount;d.granSpread=base.granSpread;d.multiStep=base.multiStep;
+ d.filter=base.filter;d.ampMod=base.ampMod;d.down=base.down;d.shaper=base.shaper;d.phaser=base.phaser;d.resonator=base.resonator;d.phaserByHand=base.phaserByHand;d.groupFilter=base.groupFilter;d.shaperCurve=base.shaperCurve;
+ d.granRate=base.granRate;d.granLen=base.granLen;d.amp=base.amp;
+ std::memcpy(d.intervals,base.intervals,sizeof d.intervals);d.intervalCount=base.intervalCount;d.octave=base.octave;
+ d.motion=base.motion;d.fingers=base.fingers;d.spawn=base.spawn;d.durMin=base.durMin;d.durMax=base.durMax;d.out=base.out;
+ d.lfo1Shape=base.lfo1Shape;d.lfo2Shape=base.lfo2Shape;
+}
 template<int E>void cook(void *out,const int32_t *val){
  auto &c=*new(out)Cooked();c.seed=uint32_t(val[0]);c.family=familyOf(E,c.seed);va::Random r(c.seed);
- if constexpr(E==6)new(c.recipe)va::Design(animaRecipe(c.family,c.seed,c.sliders));
- if constexpr(E==8){auto p=vb::Params();p.drawHidden(c.seed);double sliders[8];for(auto &x:sliders)x=r.in(.15f,.9f);sliders[4]=r.in(.4f,.85f);sliders[5]=r.in(.15f,.65f);sliders[6]=r.in(.03f,.32f);sliders[7]=r.in(.25f,.8f);
-  int f=c.family;if(f%6==0){sliders[1]=r.in(.6f,1.f);sliders[2]=r.in(.5f,.95f);}if(f%6==1){sliders[0]=r.in(.1f,.5f);sliders[5]=r.in(.5f,.85f);}if(f%6==2){sliders[3]=r.in(.5f,.95f);sliders[5]=r.in(.1f,.3f);}if(f>=18){p.attack=r.in(.06f,.4f);p.asr=true;}
-  sliders[0]=std::clamp(sliders[0]*.5+(f%4)*.15,0.,1.);sliders[1]=std::clamp(sliders[1]*.5+(f/4%3)*.2,0.,1.);sliders[2]*=f%2?.9:.35;sliders[3]*=f%3==0?1.:.35;
+ const uint32_t var=uint32_t(val[1]);const int f=c.family;
+ va::Random rt(variationSeed(E,var)),rv(variationSeed(E,var)^0x5eed5eedull);const float a=var?rv.in(.4f,.75f):0.f;
+ if constexpr(E==6){
+  auto pre=animaDraw(f,c.seed,c.sliders);
+  if(!var)new(c.recipe)va::Design(va::applySliders(pre,c.sliders));   // built in place, as before variations
+  else{
+   const auto base=va::applySliders(pre,c.sliders);
+   float t[8],s[8];animaSliders(rt,t);
+   // tone, resonance, fm, grain, texture, space, motion vary; density (finger
+   // count, CPU) stays. fm/grain/texture/space bring objects in above 0.5.
+   for(int i=0;i<8;i++)s[i]=toward(c.sliders[i],t[i],a);
+   s[7]=c.sliders[7];
+   for(int i=2;i<=5;i++)sameSide(s[i],c.sliders[i],.5f);
+   sameSide(s[5],c.sliders[5],.65f);
+   auto d=va::applySliders(pre,s);varyAnima(d,base,rv);
+   std::memcpy(c.sliders,s,sizeof s);new(c.recipe)va::Design(d);
+  }
+ }
+ if constexpr(E==8){auto p=vb::Params();p.drawHidden(c.seed);double sliders[8];bayDraw(r,f,sliders,p);
+  if(var){
+   vb::Params tp;tp.drawHidden(rt.next());double ts[8];bayDraw(rt,f,ts,tp);
+   // shape, folds, fm low, fm high, peak, decay, reverb vary; drive (output
+   // level) stays; shape stays on its side of 1/3, where the 44-partial
+   // additive carrier switches on.
+   const double s0=sliders[0];for(int i=0;i<7;i++)sliders[i]=toward(sliders[i],ts[i],a);
+   if(s0<=1./3)sliders[0]=std::min(sliders[0],1./3);else sliders[0]=std::max(sliders[0],1./3+1e-4);
+   p.attack=std::clamp(towardLog(p.attack,tp.attack,a),.003,8.);p.lfoFreq=std::clamp(towardLog(p.lfoFreq,tp.lfoFreq,a),.001,10.);
+   // LFO amounts the patch already has (never on frequency, never on shape).
+   for(double *x:{&p.toFolds,&p.toFm1,&p.toFm2,&p.toAttack,&p.toPeak,&p.toDecay,&p.toReverb})if(*x>0)*x=std::clamp(toward(*x,double(rv.unit()),a),0.,1.);
+  }
   p.setSliders(sliders);new(c.recipe)vb::Params(p);}
- if constexpr(E==9)new(c.recipe)vr::Patch(resurgentRecipe(c.family,c.seed));
- if constexpr(E==10){for(int i=0;i<8;i++)c.sliders[i]=r.in(.3f,.8f);c.sliders[0]=.5f;int profile=c.family/8;if(profile==1){c.sliders[1]=r.in(.5f,.9f);c.sliders[2]=r.in(.6f,.95f);c.sliders[5]=r.in(.2f,.6f);}if(profile==2){c.sliders[3]=r.in(.1f,.5f);c.sliders[6]=r.in(.55f,.85f);c.sliders[7]=r.in(.55f,.9f);}}
- if constexpr(E==7){c.sliders[0]=r.in(.12f,.92f);c.sliders[1]=r.in(.12f,.92f);c.sliders[2]=r.in(.4f,.95f);c.sliders[3]=r.in(.1f,.8f);}
+ if constexpr(E==9){new(c.recipe)vr::Patch(resurgentRecipe(f,c.seed));
+  if(var){
+   auto &p=c.as<vr::Patch>();const vr::Patch t=resurgentRecipe(f,uint32_t(rt.next())|1u);
+   static const int fields[]={vr::P_level_o2,vr::P_level_o3,vr::P_filter1_cutoff,vr::P_filter1_resonance,vr::P_filter1_envmod,vr::P_filter2_cutoff,
+    vr::P_env1_attack,vr::P_env1_decay,vr::P_env1_sustain,vr::P_env1_release,vr::P_env2_decay,vr::P_lfo1_rate,vr::P_ws_drive,vr::P_fm_depth};
+   for(int side=0;side<2;side++){
+    auto &v=p.scene[side].p;const auto &w=t.scene[side].p;
+    for(int k:fields)v[k]=toward(v[k],w[k],a);
+    for(int o=0;o<3;o++){
+     int k=vr::P_osc1_type+o*(vr::P_osc2_type-vr::P_osc1_type),m=resurgentOscMask(int(v[k]));
+     for(int j=0;j<7;j++)if(m>>j&1)v[k+5+j]=toward(v[k+5+j],w[k+5+j],a);
+    }
+    auto &rs=p.scene[side].routes;const auto &ts=t.scene[side].routes;
+    rs[0].depth=toward(rs[0].depth,ts[0].depth,a);   // LFO -> filter cutoff
+    if(resurgentOscMask(int(v[vr::P_osc1_type]))&2)rs[1].depth=toward(rs[1].depth,ts[1].depth,a);   // filter env -> osc1 param1, where it is timbre
+   }
+  }
+ }
+ if constexpr(E==10){caligulaDraw(r,f,c.sliders);
+  if(var){
+   // sharp, hold, delay mix, feedback, drive vary; pitch, fm (pitch
+   // modulation depth) and lfo (the rate of that modulation) stay.
+   float t[8];caligulaDraw(rt,f,t);for(int i:{1,3,5,6,7})c.sliders[i]=toward(c.sliders[i],t[i],a);
+  }
+ }
+ if constexpr(E==7){russoloDraw(r,c.sliders);
+  if(var){float t[4];russoloDraw(rt,t);if(russoloPot1[f])c.sliders[0]=toward(c.sliders[0],t[0],a);if(russoloPot2[f])c.sliders[1]=toward(c.sliders[1],t[1],a);c.sliders[3]=toward(c.sliders[3],t[3],a);}
+ }
 }
 std::array<vr::Wavetable,6> tables;
 void init(){

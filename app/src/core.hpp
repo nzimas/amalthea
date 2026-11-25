@@ -107,7 +107,13 @@ struct Step {
   std::array<uint8_t,NoteParameters> locks{{Inherit,Inherit,Inherit,Inherit,Inherit,Inherit,Inherit}};
   // NOTE LENGTH in steps (1 .. 64). Reaching the next note makes a click-free legato into it.
   uint8_t length = 1;
+  // INSTRUMENT column: a per-row variation of the row's instrument sound (0: the patch as
+  // it is). The seed redraws the patch's non-pitch parameters; pitch and tuning never change.
+  uint32_t variation = 0;
 };
+// FUNC + hold X on the INSTRUMENT column draws at most this many distinct variations per
+// track; later rows of a longer column reuse earlier rows' variations of the same instrument.
+constexpr int VariationsPerTrack = 16;
 constexpr int MaxNoteLength = 64;
 // On-screen / cursor order of the columns: NOTE, MOD (it modifies the note), INST, FX 1, FX 2.
 // Stored column numbers (sessions, settings, densities) are unchanged.
@@ -295,6 +301,10 @@ struct Editor {
   bool pendingInsertSet=false;
   InsertSettings pendingInsert{};
   void randomizeBlankPatches();
+  // FUNC + hold X on the INSTRUMENT column: every row holding an instrument gets its own
+  // variation of that instrument's non-pitch parameters (editing: the edited row only).
+  void varyInstrumentRows();
+  void varyPendingInstrument();
   bool eventRandomized=false;
   void leaveAppliance();
   void randomizeEventParameter(bool wholeColumn);

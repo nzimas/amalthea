@@ -47,6 +47,13 @@
   <div class="content">
     <main>
 <h1>Changelog</h1>
+<h2 id="build-37-instrument-row-variations">Build 37 — Instrument row variations</h2>
+<ul>
+<li>FUNC + hold X on the INSTRUMENT column gives every row holding an instrument its own random variation of that instrument's sound: the same patch family with redrawn non-pitch parameters (timbre, filter, envelopes, modulation and effect amounts), for every engine. Pitch, tuning, detune, FM ratios, glide, pitch envelopes / modulation and drum tuning never change, nor does the output level. Rows with an instrument can hold one instrument or several. A small square marks a varied row.</li>
+<li>With rows selected (FUNC + F1 / F2) only those rows vary; while editing an INST cell, FUNC + hold X varies that row only. At most 16 distinct variations per track: rows past the 16th reuse their instrument's earlier ones. Undo restores; hold X on INST (a new track sound) clears the column's variations; ERASE or choosing another instrument clears a row's.</li>
+<li>Each variation is cooked once on the UI thread into a bounded pool shared across tracks; native and PERC voices start a fresh voice for a different variation and the previous one releases (tails stay bounded per track).</li>
+<li>Sessions are AMAL24 (the per-row variation seeds); AMAL23 and older load without variations.</li>
+</ul>
 <h2 id="build-36-lifeblood-snapshot-repair">Build 36 — LIFEBLOOD snapshot repair</h2>
 <ul>
 <li>A snapshot stored while angiogenesis was absorbing a node kept vessels to that node, so the session could not be loaded again (builds 29-35). Storing now removes them, and such sessions load with those vessels dropped and the flow repaired.</li>
@@ -339,7 +346,7 @@
 </ul>
     </main>
     <footer>
-      <p>Amalthea build 36. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 37. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

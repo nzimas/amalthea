@@ -142,6 +142,7 @@
 <tr><td>Draw NOTE with conditions, pan, volume and sends</td><td>Shift + hold X on NOTE</td></tr>
 <tr><td>New sound for the track's instrument (written on every INST row)</td><td>Hold X on INST; an overlay names it</td></tr>
 <tr><td>Random instrument slots per step</td><td>Shift + hold X on INST</td></tr>
+<tr><td>A variation of each row's instrument (pitch kept)</td><td>FUNC + hold X on INST</td></tr>
 <tr><td>Draw the FX column: effects, mixes and their parameters</td><td>Hold X on FX1 / FX2</td></tr>
 <tr><td>The same, with positive trigger conditions</td><td>Shift + hold X on FX1 / FX2</td></tr>
 <tr><td>While editing a cell: new value for the shown tab only</td><td>Tap X (auditioned; Enter keeps it)</td></tr>
@@ -164,6 +165,7 @@
 <p>LENGTH, CLOCK and DIRECTION for the selected column. Each starts at TRACK (following the track); an explicit value overrides it for that column only. Columns with the same length, rate and direction stay in step.</p>
 <h3 id="instruments">Instruments</h3>
 <p>Each track has its own twelve instrument slots, one engine each; editing a sound on one track never changes another track.</p>
+<p><b>Row variations.</b> FUNC + hold X on INST gives every row that holds an instrument its own variation of that instrument's sound: the same family, with its timbre, filter, envelopes and modulation and effect amounts redrawn for that row. Pitch, tuning, detune, FM ratios, glide, pitch envelopes and modulation, drum tuning and the output level never change, so the notes play exactly as written. A small square after the slot number marks a varied row. With rows selected (FUNC + F1 / F2) only those rows vary; while editing an INST cell, only that row. A track holds up to 16 distinct variations (later rows of a longer column reuse their instrument's). Undo restores; hold X on INST draws a new sound and clears the column's variations; ERASE or another instrument clears a row's. Variations are saved with sessions and patterns.</p>
 <table>
 <tr><th>Slot</th><th>Engine</th><th>Character</th></tr>
 <tr><td>01</td><td>VAP</td><td>Analogue-style voice: 18 families (sub pressure, EBM bass, acid wound, mourning pad, noise wall, impact ...)</td></tr>
@@ -264,7 +266,7 @@
 </ul></div>
     </main>
     <footer>
-      <p>Amalthea build 36. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 37. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

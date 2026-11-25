@@ -50,7 +50,51 @@ static void discovery_sound(sound_t*s,uint32_t seed,int hive){
  else{s->syn[FT_FDBK]=40+seed%65;s->syn[FT_HARM]=30+seed%85;}
 }
 static void syn_cook(patch_t *c,const sound_t *s){if(c->hive==K_DRUM)fdf_cook(&c->syn.dr,s->syn);else if(c->hive==K_HIVE)sw_cook(&c->syn.sw,s);else ft_cook(&c->syn.ft,s);}
-static void cook_kind(void *p,const int32_t *v,int kind){patch_t*c=p;sound_t s;gen_sound(&s,kind==K_DRUM?ENG_FMD:kind==K_HIVE?ENG_SWM:ENG_FMT,-1,-1,(uint32_t)v[0]);if(kind!=K_DRUM)discovery_sound(&s,(uint32_t)v[0],kind==K_HIVE);c->sound=s;c->modulated=0;for(unsigned i=0;i<NLFO;i++)c->modulated|=lfo_on(&s.lfo[i]);vck_cook(&c->chain,&s);c->seed=(uint32_t)v[0];c->hive=(uint8_t)kind;syn_cook(c,&s);}
+/* A row's variation (val[1], nonzero): the drawn sound moved part of the way toward a random value near each of its
+ * timbre parameters, within the Digitone II's ranges. Never the pitch (TUNE, RATIOs, OFFSETs, DETUNE, MAIN OCT,
+ * ANIMATION and NOISE MOD -- pitch modulation --, the sweep, the comb's FREQ and KEYTRACK), the levels (LEV, VOL, the
+ * drum's body, transient and noise levels), the LFOs, the machine, the algorithm or a switch: a parameter at its end
+ * (0: off, 127: held) stays there, so no section is turned on that the recipe left off. */
+static uint32_t bv_hash(uint32_t x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
+static uint32_t bv_next(uint32_t *r){uint32_t x=*r;x^=x<<13;x^=x>>17;x^=x<<5;return *r=x;}
+static int32_t bv_in(uint32_t *r,int32_t a,int32_t b){return a+(int32_t)(bv_next(r)%(uint32_t)(b-a+1));}
+/* half the way toward a value drawn within spread of v, inside lo .. hi */
+static int32_t bv_nudge(uint32_t *r,int32_t v,int32_t lo,int32_t hi,int32_t sp){int32_t a=v-sp>lo?v-sp:lo,b=v+sp<hi?v+sp:hi;return a>b?v:v+(bv_in(r,a,b)-v)/2;}
+/* .. its ends kept (lo and hi stay; between, it stays between) */
+static int32_t bv_mid(uint32_t *r,int32_t v,int32_t lo,int32_t hi,int32_t sp){return v<=lo||v>=hi?v:bv_nudge(r,v,lo+1,hi-1,sp);}
+#define BV8(f,lo,hi,sp) ((f)=(uint8_t)bv_mid(r,(f),(lo),(hi),(sp)))
+#define BVS(k,lo,hi,sp) (s->syn[k]=(int16_t)bv_mid(r,s->syn[k],(lo),(hi),(sp)))
+static void bv_vary(sound_t *s,uint32_t seed,uint32_t var,int kind)
+{
+    uint32_t rs=bv_hash(var^bv_hash(seed^0x9e3779b9u)),*r=&rs;
+    int comb=s->fmach==FLT_CBM||s->fmach==FLT_CBP;
+    if(!rs)rs=1;
+    /* FLTR: its envelope, cutoff (not a comb's: its pitch), resonance (no more than 110 unless drawn so), depth */
+    BV8(s->flt[F_ATK],0,127,16);BV8(s->flt[F_DEC],0,127,16);BV8(s->flt[F_SUS],0,127,20);BV8(s->flt[F_REL],0,127,16);
+    if(!comb)s->flt[F_FREQ]=(uint8_t)bv_nudge(r,s->flt[F_FREQ],0,127,16);
+    s->flt[F_RESO]=(uint8_t)bv_nudge(r,s->flt[F_RESO],0,s->flt[F_RESO]>110?s->flt[F_RESO]:110,comb?8:12);
+    if(s->flt[F_ENV]!=64){int32_t e=(int32_t)s->flt[F_ENV]-64,m=bv_nudge(r,e<0?-e:e,1,63,12);s->flt[F_ENV]=(uint8_t)(64+(e<0?-m:m));}
+    /* AMP: attack and decay (sustain and release in ADSR); HOLD as drawn */
+    BV8(s->amp[A_ATK],0,127,12);BV8(s->amp[A_DEC],0,127,12);
+    if(s->amp[A_MODE]){BV8(s->amp[A_SUS],0,127,20);BV8(s->amp[A_REL],0,127,12);}
+    /* FX: the amounts of what is on */
+    BV8(s->fx[X_OD],0,100,16);BV8(s->fx[X_BR],0,127,16);BV8(s->fx[X_SRR],0,127,16);
+    if(kind==K_HIVE){BVS(SW_SWRM,-1,121,16);BVS(SW_MAIN,-1,121,16);BVS(SW_MIX,0,127,20);}
+    else if(kind==K_OP4){
+        BVS(FT_HARM,36,90,8);BVS(FT_FDBK,0,127,20);BVS(FT_MIX,0,127,20);
+        BVS(FT_AATK,0,127,12);BVS(FT_ADEC,0,127,12);BVS(FT_AEND,0,127,20);BVS(FT_ALEV,0,127,20);
+        BVS(FT_BATK,0,127,12);BVS(FT_BDEC,0,127,12);BVS(FT_BEND,0,127,20);BVS(FT_BLEV,0,127,20);
+    } else {
+        BVS(FD_FDBK,0,127,16);BVS(FD_FOLD,0,127,12);BVS(FD_ABN,0,127,12);BVS(FD_GRAN,0,127,12);
+        BVS(FD_DECA,0,127,12);BVS(FD_ENDA,0,127,16);BVS(FD_MODA,0,127,12);
+        BVS(FD_DECB,0,127,12);BVS(FD_ENDB,0,127,16);BVS(FD_MODB,0,127,12);
+        BVS(FD_HOLD,0,127,10);BVS(FD_DEC,0,127,10);BVS(FD_NHLD,0,127,10);BVS(FD_NDEC,0,127,10);
+        BVS(FD_NBAS,-1,128,12);BVS(FD_NWID,-1,128,12);
+    }
+}
+#undef BV8
+#undef BVS
+static void cook_kind(void *p,const int32_t *v,int kind){patch_t*c=p;sound_t s;gen_sound(&s,kind==K_DRUM?ENG_FMD:kind==K_HIVE?ENG_SWM:ENG_FMT,-1,-1,(uint32_t)v[0]);if(kind!=K_DRUM)discovery_sound(&s,(uint32_t)v[0],kind==K_HIVE);if(v[1])bv_vary(&s,(uint32_t)v[0],(uint32_t)v[1],kind);c->sound=s;c->modulated=0;for(unsigned i=0;i<NLFO;i++)c->modulated|=lfo_on(&s.lfo[i]);vck_cook(&c->chain,&s);c->seed=(uint32_t)v[0];c->hive=(uint8_t)kind;syn_cook(c,&s);}
 static void cook_hive(void*p,const int32_t*v){cook_kind(p,v,K_HIVE);}
 static void cook_op4(void*p,const int32_t*v){cook_kind(p,v,K_OP4);}
 static void cook_drum(void*p,const int32_t*v){cook_kind(p,v,K_DRUM);}
