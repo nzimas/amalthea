@@ -103,7 +103,7 @@ int main(){
   // --- Session format --------------------------------------------------------------------
   {
     auto p=blankProject();p.tracks[3].steps[7].instrument=4;p.tracks[3].steps[7].variation=0xdeadbeefu;p.tracks[11].steps[255].instrument=0;p.tracks[11].steps[255].variation=7;
-    auto bytes=encodeProject(p);require(bytes[4]==24,"AMAL24 payload");
+    auto bytes=encodeProject(p);require(bytes[4]>=24,"AMAL24 payload");
     require(bytes.size()<200000,"payload fits the loader limit");
     Project q;std::string err;require(decodeProject(q,bytes,err),"AMAL24 decodes");
     require(encodeProject(blankProject()).size()+2*7==bytes.size(),"only varied rows are stored");

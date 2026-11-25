@@ -102,7 +102,9 @@ through8:8; Enter commits, Cancel/Home discards. No shared COND column remains.
 - NOTE1:2 plays on cycles1,3,5... of the NOTE column.
 - INST2:3 applies its instrument on cycles2,5,8... of INST; otherwise track default.
 - FX1:2 applies the selected effect on alternate FX-column cycles; otherwise track defaults.
-- MOD+02 with2:2 transposes by two semitones on alternate MOD-column cycles.
+- MOD+02 with2:2 offsets that row's note by two semitones on alternate MOD-column cycles.
+- MOD T+3 with1:2 on step 1 transposes the whole sequence (offsets included) on cycles 1, 3, 5 ...;
+  cycles 2, 4 ... play as written.
 
 Different column clocks/lengths/directions combine with independent conditions.
 Conditions do not nest against NOTE occurrences. NOTE always follows its own gate;

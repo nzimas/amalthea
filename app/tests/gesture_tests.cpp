@@ -8,7 +8,7 @@ int main(){
   Editor e;e.project=blankProject();e.track=3;e.row=2;e.column=4;
   auto &t=e.project.tracks[3];t.length=5;t.instrument=2;
   t.steps[0].note=60;t.steps[1].note=-1;t.steps[2].note=-2;t.steps[3].note=-3;t.steps[4].note=67;
-  t.steps[4].fx[0]={FxType::Delay,42};t.steps[4].condition={2,3};t.steps[4].modifier={5,false};t.steps[8].note=70;
+  t.steps[4].fx[0]={FxType::Delay,42};t.steps[4].condition={2,3};t.steps[4].modifier={5,ModifierType::Offset};t.steps[8].note=70;
   auto original=e.project;
   e.action(Action::ShiftDown);e.action(Action::Down);
   require(t.steps[0].note==48&&t.steps[4].note==55,"whole active sequence transposes down exactly twelve semitones");

@@ -57,7 +57,7 @@ int main() {
                     b.condition.every == a.condition.every &&
                     b.condition.occurrence == a.condition.occurrence &&
                     b.modifier.semitones == a.modifier.semitones &&
-                    b.modifier.conditionalOnly == a.modifier.conditionalOnly,
+                    b.modifier.type == a.modifier.type,
                 "column scope");
         for (int slot = 0; slot < 2; slot++)
           require(b.fx[slot].type == a.fx[slot].type &&
@@ -121,11 +121,11 @@ int main() {
   Step s;
   s.note = 60;
   s.condition = {1, 2};
-  s.modifier = {2, true};
+  s.modifier={2,ModifierType::Offset};
   require(triggeredNote(s, 0) == 62 && triggeredNote(s, 1) == -1 &&
               triggeredNote(s, 2) == 62,
           "conditional transposition and gating");
-  s.modifier.conditionalOnly = false;
+  s.modifier.type = ModifierType::Transpose;   // (a TRANSPOSE cell is no offset of its own row)
   require(triggeredNote(s,1)==-1,"modifier mode never bypasses note condition");
   for (int every = 1; every <= 16; every++)
     for (int occurrence = 1; occurrence <= every; occurrence++)
@@ -147,7 +147,7 @@ int main() {
   auto &step = p.tracks[0].steps[0];
   step.note = 60;
   step.condition = {1, 2};
-  step.modifier = {3, true};
+  step.modifier={3,ModifierType::Offset};
   Audio audio;
   audio.submit(p, true);
   std::vector<float> data(352800 * 2);

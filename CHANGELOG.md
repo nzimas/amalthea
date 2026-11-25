@@ -1,3 +1,16 @@
+## Build 38 — MOD TRANSPOSE, empty MOD cells, FX draws
+
+- MOD cells are empty by default (`---`) instead of `+00`. Older sessions load their zero
+  offsets as empty cells; other offsets are unchanged.
+- New MOD type TRANSPOSE (`T+n`, -24..+24): from its row to the end of the MOD column's
+  cycle (or the next TRANSPOSE) every note is shifted, offsets included. Each MOD cycle
+  starts untransposed; a cycle condition on a TRANSPOSE decides on which cycles it
+  applies. Left/Right in the MOD edit view picks OFFSET, TRANSPOSE or empty. The MOD
+  column generator places mostly offsets and about one transpose in six.
+- Shift + X on an FX row in edit view no longer repeats the same effects in the same
+  order: each edit draws from fresh entropy, and a draw never repeats the current effect.
+- Sessions are AMAL25 (the MOD type byte); AMAL24 and older load.
+
 ## Build 37 — Instrument row variations
 
 - FUNC + hold X on the INSTRUMENT column gives every row holding an instrument its own

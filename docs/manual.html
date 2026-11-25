@@ -106,7 +106,7 @@
 <table>
 <tr><th>Column</th><th>Holds</th></tr>
 <tr><td>NOTE</td><td>A pitch (in the session's scale), OFF or TIE; plus length, condition, pan, volume and five sends</td></tr>
-<tr><td>MOD</td><td>A pitch offset in semitones for the note on that row</td></tr>
+<tr><td>MOD</td><td>Empty (<code>---</code>), an OFFSET for that row's note (<code>+02</code>) or a TRANSPOSE from that row on (<code>T+2</code>)</td></tr>
 <tr><td>INST</td><td>The instrument slot for that row (<code>--</code> follows the track's instrument)</td></tr>
 <tr><td>FX1 / FX2</td><td>An insert effect and its dry/wet mix, with a LENGTH in steps and a condition</td></tr>
 </table>
@@ -117,6 +117,7 @@
 <tr><td>Edit a cell</td><td>Enter; the cross changes the value; Enter commits, Back cancels</td></tr>
 <tr><td>Browse the cell's tabs while editing</td><td>F1 / F2 (two tabs visible at a time)</td></tr>
 <tr><td>Choose an effect while editing FX1 / FX2</td><td>Left / right (a large name overlay appears); up / down sets the mix</td></tr>
+<tr><td>Choose OFFSET, TRANSPOSE or empty while editing MOD</td><td>Left / right; up / down sets the semitones (−24 to +24)</td></tr>
 <tr><td>Transpose the whole track an octave</td><td>Shift + up / down</td></tr>
 <tr><td>Clear the whole track</td><td>Shift + B</td></tr>
 <tr><td>ERASE mode</td><td>Shift + Enter; move anywhere, Enter clears the cell; Shift + Enter or Back leaves</td></tr>
@@ -132,7 +133,8 @@
 <p>While you edit a NOTE, every change is auditioned at once, also while stopped or on a muted track; nothing is stored until Enter. <b>FUNC + short X</b> on INST plays the track's instrument on the scale's root, octave 4.</p>
 <p><b>NOTE tabs:</b> VALUE, LENGTH, CONDITION, PAN, VOLUME and the five sends (DELAY, REVERB, ABRASION, CORROSION, MODULATION). Left restores the track's own value (inheritance); right copies the track value as an explicit override. Step volume is relative to the track fader.</p>
 <p><b>FX tabs:</b> DRY/WET MIX (0 % dry, 100 % fully processed; a newly chosen effect starts at 50 %), LENGTH (1–64 steps: the effect stays on its slot over the following rows, empty rows keep it running, a new effect row replaces it) and CONDITION. Effects with memory (reverbs, delays, granular, resonators) ring out on their own when they end or are replaced. No effect can feed itself into a runaway: every insert stays within reach of a fading memory of its input, so tails always die away.</p>
-<p><b>Conditions</b> A:B make an event act on cycle A of every B cycles of its own column, from 1:1 to 8:8 (36 choices). A NOTE condition gates the note; INST chooses the slot or the track default; an inactive FX row bypasses the slot; an inactive MOD adds nothing.</p>
+<p><b>Conditions</b> A:B make an event act on cycle A of every B cycles of its own column, from 1:1 to 8:8 (36 choices). A NOTE condition gates the note; INST chooses the slot or the track default; an inactive FX row bypasses the slot; an inactive OFFSET adds nothing, and an inactive TRANSPOSE leaves the transposition as it was on that cycle.</p>
+<p><b>MOD.</b> Every MOD cell starts empty. An <b>OFFSET</b> shifts only its own row's note. A <b>TRANSPOSE</b> shifts every note from its row to the end of the MOD column's cycle, or until the next TRANSPOSE (<code>T+0</code> returns to the written notes); offsets are added on top, so <code>+02</code> under <code>T+1</code> plays three semitones up. Each MOD cycle starts untransposed: a TRANSPOSE on step 1 transposes the whole sequence, one on step 9 only what follows it, and a TRANSPOSE with condition 1:2 transposes every other cycle while the others play as written. Up / down on an empty cell makes an OFFSET. Sessions from before build 38 load their <code>+00</code> cells as empty.</p>
 <h3 id="drawing-at-random">Drawing at random</h3>
 <p>X is the generator, everywhere in the Tracker.</p>
 <table>
@@ -266,7 +268,7 @@
 </ul></div>
     </main>
     <footer>
-      <p>Amalthea build 37. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 38. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

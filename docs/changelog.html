@@ -47,6 +47,13 @@
   <div class="content">
     <main>
 <h1>Changelog</h1>
+<h2 id="build-38-mod-transpose-empty-mod-cells-fx-draws">Build 38 — MOD TRANSPOSE, empty MOD cells, FX draws</h2>
+<ul>
+<li>MOD cells are empty by default (<code>---</code>) instead of <code>+00</code>. Older sessions load their zero offsets as empty cells; other offsets are unchanged.</li>
+<li>New MOD type TRANSPOSE (<code>T+n</code>, -24..+24): from its row to the end of the MOD column's cycle (or the next TRANSPOSE) every note is shifted, offsets included. Each MOD cycle starts untransposed; a cycle condition on a TRANSPOSE decides on which cycles it applies. Left/Right in the MOD edit view picks OFFSET, TRANSPOSE or empty. The MOD column generator places mostly offsets and about one transpose in six.</li>
+<li>Shift + X on an FX row in edit view no longer repeats the same effects in the same order: each edit draws from fresh entropy, and a draw never repeats the current effect.</li>
+<li>Sessions are AMAL25 (the MOD type byte); AMAL24 and older load.</li>
+</ul>
 <h2 id="build-37-instrument-row-variations">Build 37 — Instrument row variations</h2>
 <ul>
 <li>FUNC + hold X on the INSTRUMENT column gives every row holding an instrument its own random variation of that instrument's sound: the same patch family with redrawn non-pitch parameters (timbre, filter, envelopes, modulation and effect amounts), for every engine. Pitch, tuning, detune, FM ratios, glide, pitch envelopes / modulation and drum tuning never change, nor does the output level. Rows with an instrument can hold one instrument or several. A small square marks a varied row.</li>
@@ -346,7 +353,7 @@
 </ul>
     </main>
     <footer>
-      <p>Amalthea build 37. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 38. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

@@ -10,7 +10,7 @@ int main(){
     Editor e;e.project=blankProject();e.project.patches[0].seed=seed;
     auto &track=e.project.tracks[0];
     for(int r=0;r<16;r++){
-      track.steps[r].note=60+r%5;track.steps[r].condition={1,3};track.steps[r].modifier={7,true};
+      track.steps[r].note=60+r%5;track.steps[r].condition={1,3};track.steps[r].modifier={7,ModifierType::Offset};
       track.steps[r].fx={Effect{effect,uint8_t(effect==FxType::Volume?1:100)},Effect{FxType::Lowpass,100}};
     }
     Audio used;std::vector<float> history(176384*2),reused(16384*2),fresh(16384*2);

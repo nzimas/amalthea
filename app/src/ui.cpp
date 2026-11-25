@@ -429,10 +429,10 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
     volumeOverlay();return;
   }
   {
-    // Columns sized to what they show (NOTE 3, INST 2, FX 5, FX 5, MOD 3 characters) with an equal
+    // Columns sized to what they show (NOTE 3, INST 2, FX 5, FX 5, MOD up to 4 characters) with an equal
     // space between the values, instead of five equal slots that left INST adrift.
     // Laid out in ColumnOrder (NOTE, MOD, INST, FX 1, FX 2), indexed here by stored column.
-    const int leftAt[] = {92,276,460,621,851}, widthAt[] = {100,100,100,134,134};
+    const int leftAt[] = {92,276,460,621,851}, widthAt[] = {100,140,100,134,134};   // MOD fits T-12
     int left[Columns],widths[Columns];
     for(int p=0;p<Columns;p++){left[ColumnOrder[p]]=leftAt[p];widths[ColumnOrder[p]]=widthAt[p];}
     const char *names[] = {"NOTE", "INST", "FX1", "FX2", "MOD"};
@@ -517,7 +517,7 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
       int x=32+visible*352;bool selected=e.eventTab==tab;
       panel.rect(X(x),X(64),X(344),X(48),selected?accent:0x282828);
       bool fx=e.fxColumn();
-      label(x+16,70,312,tab==0?(e.column==4?"OFFSET":fx?"DRY/WET MIX":"VALUE"):(e.column==0||fx)&&tab==1?"LENGTH":tab==(e.column==0||fx?2:1)?"CONDITION":noteParameterName(tab-3),30,selected?BG:FG);
+      label(x+16,70,312,tab==0?(e.column==4?"MOD TYPE / VALUE":fx?"DRY/WET MIX":"VALUE"):(e.column==0||fx)&&tab==1?"LENGTH":tab==(e.column==0||fx?2:1)?"CONDITION":noteParameterName(tab-3),30,selected?BG:FG);
     }
     std::string value,description;
     if(e.lengthTab()&&e.fxColumn()){
@@ -548,7 +548,8 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
       value=units::wet(fx.value);
       description=fx.value==0?"DRY - LEFT/RIGHT: TYPE":"LEFT/RIGHT: TYPE   UP/DOWN: DRY/WET";
     } else {
-      value=modifierText(e.pending.modifier);description="OFFSET IN SEMITONES";
+      auto m=e.pending.modifier;value=modifierText(m);
+      description=m.type==ModifierType::None?"LEFT/RIGHT: OFFSET OR TRANSPOSE":m.type==ModifierType::Offset?"OFFSET THIS ROW - LEFT/RIGHT: TYPE":"TRANSPOSE FROM HERE - LEFT/RIGHT: TYPE";
     }
     panel.textFit(padding,X(136),contentWidth,value,X(88),FG);
     panel.textFit(padding,X(278),contentWidth,description,X(26),DIM);

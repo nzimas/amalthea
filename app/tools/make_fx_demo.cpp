@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
       s.condition = {uint8_t(1 + t % 2), uint8_t(1 + t % 3)};
       if (s.condition.occurrence > s.condition.every)
         s.condition.occurrence = 1;
-      s.modifier = {int8_t(t % 3 - 1), false};
+      s.modifier = {int8_t(t % 3 - 1), ModifierType::Offset};
     }
   }
   std::string error;

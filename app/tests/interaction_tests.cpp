@@ -16,11 +16,11 @@ int main() {
   Editor e;e.project=blankProject();
   for(auto &t:e.project.tracks)for(auto &s:t.steps)require(s.note==-1 && s.fx[0].type==FxType::None && s.fx[1].type==FxType::None,"blank startup has no events or effects");
   e.project=demoProject();e.track=2;e.column=4;e.project.tracks[2].pan=65;e.project.tracks[2].level=12;e.project.tracks[2].mute=true;
-  e.project.tracks[2].steps[200].fx[0]={FxType::Fuzz,88};e.project.tracks[2].steps[0].condition={2,3};e.project.tracks[2].steps[0].modifier={7,false};
+  e.project.tracks[2].steps[200].fx[0]={FxType::Fuzz,88};e.project.tracks[2].steps[0].condition={2,3};e.project.tracks[2].steps[0].modifier={7,ModifierType::Offset};
   auto before=e.project;
   e.action(Action::Enter);e.action(Action::ShiftDown);e.action(Action::TrackSettings);e.action(Action::ShiftUp);
   auto &t=e.project.tracks[2];require(!e.editing&&t.level==90&&t.pan==0&&!t.mute,"clear resets track mixing and editing");
-  for(auto &s:t.steps)require(s.note==-1&&s.instrument==NoInstrument&&s.fx[0].type==FxType::None&&s.fx[1].type==FxType::None&&s.condition.every==1&&s.condition.occurrence==1&&s.modifier.semitones==0&&s.modifier.conditionalOnly,"clear resets all 256 stored steps");
+  for(auto &s:t.steps)require(s.note==-1&&s.instrument==NoInstrument&&s.fx[0].type==FxType::None&&s.fx[1].type==FxType::None&&s.condition.every==1&&s.condition.occurrence==1&&s.modifier.semitones==0&&s.modifier.type==ModifierType::None,"clear resets all 256 stored steps");
   for(int tr=0;tr<Tracks;tr++)if(tr!=2)require(std::memcmp(&before.tracks[tr],&e.project.tracks[tr],sizeof(Track))==0,"clear leaves other tracks unchanged");
   e.action(Action::Undo);require(std::memcmp(&before.tracks[2],&e.project.tracks[2],sizeof(Track))==0,"single undo restores entire track");
   e.page=Page::Master;e.masterModule=8;

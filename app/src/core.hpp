@@ -93,9 +93,12 @@ constexpr bool ringingEffect(FxType t){return t==FxType::Space||t==FxType::Cloud
 struct Condition {
   uint8_t occurrence = 1, every = 1;
 };
+// MOD column cell. OFFSET shifts its own row's note; TRANSPOSE shifts every note from its
+// row to the end of the MOD column's cycle (or the next TRANSPOSE), offsets included.
+enum class ModifierType : uint8_t { None, Offset, Transpose };
 struct Modifier {
   int8_t semitones = 0;
-  bool conditionalOnly = true;
+  ModifierType type = ModifierType::None;
 };
 struct Step {
   int16_t note = -1;
@@ -481,7 +484,7 @@ int cycleConditionIndex(Condition);
 bool conditionMatches(Condition, uint64_t cycle);
 Condition &eventCondition(Step &,int column);
 Condition eventCondition(const Step &,int column);
-int triggeredNote(const Step &, uint64_t cycle);
+int triggeredNote(const Step &, uint64_t cycle, int transpose = 0);
 const char *instrumentName(int);
 const char *patchFamily(const InstrumentPatch &);
 const char *masterName(int);

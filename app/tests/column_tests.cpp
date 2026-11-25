@@ -39,7 +39,7 @@ int main(){
  // Independent instrument/modifier sampling; each NOTE cell owns its condition.
  p=blankProject();auto &t=p.tracks[0];t.length=2;t.instrument=7;t.columns[1].length=3;t.columns[4]={3,2,0};
  t.steps[0].note=60;t.steps[1].note=62;t.steps[0].instrument=7;t.steps[1].instrument=6;t.steps[2].instrument=5;t.steps[0].condition={1,2};
- t.steps[0].modifier={0,true};t.steps[1].modifier={12,true};t.steps[2].modifier={-12,true};
+ t.steps[0].modifier={0,ModifierType::Offset};t.steps[1].modifier={12,ModifierType::Offset};t.steps[2].modifier={-12,ModifierType::Offset};
  Audio combinations;combinations.submit(p,true);render(combinations,44100);
  require(combinations.stats.triggers[0]==6&&combinations.stats.lastNote[0]==62&&combinations.stats.lastInstrument[0]==6,"held condition and modifier combine with current pitch/instrument on NOTE ticks");
  // Matching settings join the currently sounding lane, including random traversal.

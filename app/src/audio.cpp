@@ -123,10 +123,14 @@ struct Audio::Impl {
   // FX LENGTH: the effect a FX row triggered keeps its slot for that many FX-column
   // steps; empty rows inside it keep it running, a new effect replaces it.
   std::array<std::array<Effect,2>,Tracks> heldFx{};
+  // TRANSPOSE in effect on each track: set by a MOD row, back to 0 when the MOD column
+  // starts a new cycle.
+  std::array<int,Tracks> transposition{};
   std::array<std::array<int,2>,Tracks> heldLeft{};
   void resetColumn(int t,int c,uint32_t seed){
     transport[t][c]=Transport{};
     if(c==2||c==3)heldLeft[t][c-2]=0;
+    if(c==4)transposition[t]=0;
     // Equal inherited lanes retain the old track traversal, including random directions.
     amalthea_walk_start(&transport[t][c].walk,seed^(0x9e3779b9u*(t+1)));
   }
@@ -287,6 +291,11 @@ struct Audio::Impl {
     auto &clock=transport[t][c];const auto &tr=project.tracks[t];
     clock.row=amalthea_walk_next(&clock.walk,columnDirection(tr,c),columnLength(tr,c));
     clock.currentCycle=clock.cycle;
+    if(c==4){
+      if(clock.advances==0)transposition[t]=0;   // the first row of a MOD cycle
+      const auto &s=tr.steps[clock.row];
+      if(s.modifier.type==ModifierType::Transpose&&conditionMatches(eventCondition(s,4),clock.currentCycle))transposition[t]=s.modifier.semitones;
+    }
     stats.columnRow[t][c].store(clock.row);stats.columnCycle[t][c].store(clock.currentCycle);stats.columnAdvances[t][c].fetch_add(1);
     if(c==0){stats.trackRow[t].store(clock.row);stats.trackCycle[t].store(clock.currentCycle);stats.advances[t].fetch_add(1);if(t==0){stats.row.store(clock.row);stats.cycle.store(clock.currentCycle);}}
     if(++clock.advances>=amalthea_walk_period(columnDirection(tr,c),columnLength(tr,c))){clock.advances=0;clock.cycle++;}
@@ -367,7 +376,7 @@ struct Audio::Impl {
       }
       if (s.note < 0)
         return;
-      int note = triggeredNote(s, cycle);
+      int note = triggeredNote(s, cycle, transposition[t]);
       if (note < 0)
         return;
       float volume = 1;

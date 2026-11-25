@@ -18,13 +18,13 @@ static void chosen(const Step&from,Step&to,int col,int tab){
  else if(col==0)to.note=from.note;
  else if(col==1)to.instrument=from.instrument;
  else if(col<4)to.fx[col-2].value=from.fx[col-2].value;
- else to.modifier.semitones=from.modifier.semitones;
+ else to.modifier=from.modifier;
 }
 static void openExit(Editor&e){e.action(Action::Shift2Up);e.action(Action::ShiftUp);e.action(Action::Shift2Down);e.action(Action::ShiftDown);}
 int main(int argc,char**argv){
  for(int col=0;col<Columns;col++)for(int tab=0;tab<(col==0?10:col==2||col==3?3:2);tab++){
   Editor e;e.project=blankProject();auto&t=e.project.tracks[0];t.columns[col].length=7;
-  for(int r=0;r<MaxRows;r++){auto&s=t.steps[r];s.note=60+r%12;s.instrument=1;s.fx[0]={FxType::Rings,40};s.fx[1]={FxType::LoFi,70};s.modifier.semitones=7;}
+  for(int r=0;r<MaxRows;r++){auto&s=t.steps[r];s.note=60+r%12;s.instrument=1;s.fx[0]={FxType::Rings,40};s.fx[1]={FxType::LoFi,70};s.modifier={7,ModifierType::Offset};}
   e.column=col;e.action(Action::Enter);e.eventTab=tab;auto before=e.project;auto pending=e.pending;auto serial=e.auditionSerial;
   auto encoded=encodeProject(e.project);e.action(Action::RandomizerOptions);
   check(e.editing&&e.page==Page::Pattern&&(col==0||col==4)==(e.auditionSerial>serial),"tap stays in editor; only the NOTE column auditions");

@@ -66,7 +66,7 @@ rows) and five columns:
 | Column | Holds |
 | --- | --- |
 | NOTE | A pitch (in the session's scale), OFF or TIE; plus length, condition, pan, volume and five sends |
-| MOD | A pitch offset in semitones for the note on that row |
+| MOD | Empty (`---`), an OFFSET for that row's note (`+02`) or a TRANSPOSE from that row on (`T+2`) |
 | INST | The instrument slot for that row (`--` follows the track's instrument) |
 | FX1 / FX2 | An insert effect and its dry/wet mix, with a LENGTH in steps and a condition |
 
@@ -77,6 +77,7 @@ rows) and five columns:
 | Edit a cell | Enter; the cross changes the value; Enter commits, Back cancels |
 | Browse the cell's tabs while editing | F1 / F2 (two tabs visible at a time) |
 | Choose an effect while editing FX1 / FX2 | Left / right (a large name overlay appears); up / down sets the mix |
+| Choose OFFSET, TRANSPOSE or empty while editing MOD | Left / right; up / down sets the semitones (−24 to +24) |
 | Transpose the whole track an octave | Shift + up / down |
 | Clear the whole track | Shift + B |
 | ERASE mode | Shift + Enter; move anywhere, Enter clears the cell; Shift + Enter or Back leaves |
@@ -104,7 +105,15 @@ memory of its input, so tails always die away.
 
 **Conditions** A:B make an event act on cycle A of every B cycles of its own column, from 1:1 to 8:8
 (36 choices). A NOTE condition gates the note; INST chooses the slot or the track default; an inactive FX row
-bypasses the slot; an inactive MOD adds nothing.
+bypasses the slot; an inactive OFFSET adds nothing, and an inactive TRANSPOSE leaves the transposition as it was
+on that cycle.
+
+**MOD.** Every MOD cell starts empty. An **OFFSET** shifts only its own row's note. A **TRANSPOSE** shifts every
+note from its row to the end of the MOD column's cycle, or until the next TRANSPOSE (`T+0` returns to the written
+notes); offsets are added on top, so `+02` under `T+1` plays three semitones up. Each MOD cycle starts
+untransposed: a TRANSPOSE on step 1 transposes the whole sequence, one on step 9 only what follows it, and a
+TRANSPOSE with condition 1:2 transposes every other cycle while the others play as written. Up / down on an
+empty cell makes an OFFSET. Sessions from before build 38 load their `+00` cells as empty.
 
 ### Drawing at random
 

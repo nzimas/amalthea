@@ -90,6 +90,8 @@ Project Editor::previewProject() const {auto p=project;if(editing&&page==Page::P
 void Editor::randomizePendingEffect(){
   auto &t=project.tracks[track];int slot=column-2;
   std::vector<FxType> types;for(auto type:selectableEffects())if(type!=FxType::None&&device.insertEnabled(type))types.push_back(type);
+  // A new draw is always a different effect from the one the row holds now.
+  if(types.size()>1)types.erase(std::remove(types.begin(),types.end(),pending.fx[slot].type),types.end());
   if(types.empty())return;
   Effect f{types[randomNext(eventRandomSeed)%types.size()],0,pending.fx[slot].length};
   InsertSettings cfg=pendingInsertSet?pendingInsert:t.inserts[slot];
@@ -131,7 +133,7 @@ int Editor::modifierBaseNote() const {
 void Editor::requestAudition(){auditionRoot=false;if((column==0&&pending.note>=0)||(column==4&&modifierBaseNote()>=0))++auditionSerial;}
 Step Editor::previewStep() const {
   if(auditionRoot){Step s{};s.note=60+project.root%12;s.instrument=project.tracks[track].instrument;return s;}   // C4 = 60
-  auto s=pending;if(column!=0&&s.note<0)s.note=60;if(column==4){int base=modifierBaseNote();s.note=base<0?-1:std::clamp(base+int(s.modifier.semitones),0,119);}return s;}
+  auto s=pending;if(column!=0&&s.note<0)s.note=60;if(column==4){int base=modifierBaseNote();s.note=base<0?-1:std::clamp(base+(s.modifier.type==ModifierType::None?0:int(s.modifier.semitones)),0,119);}return s;}
 TrackMix resolveTrackMix(const Track &t,const Step &s) {
   TrackMix m{t.level/100.f,t.pan/100.f,t.delaySend/100.f,t.reverbSend/100.f};
   for(int i=0;i<3;i++)m.macro[i]=t.macroSend[i]*.01f;
@@ -198,8 +200,10 @@ std::string conditionText(Condition c) {
   return b;
 }
 std::string modifierText(Modifier m) {
+  if(m.type==ModifierType::None)return "---";
   char b[16];
-  snprintf(b, sizeof b, "%+03d", m.semitones);
+  if(m.type==ModifierType::Transpose)snprintf(b, sizeof b, "T%+d", m.semitones);
+  else snprintf(b, sizeof b, "%+03d", m.semitones);
   return b;
 }
 bool conditionMatches(Condition c, uint64_t cycle) {
@@ -218,10 +222,11 @@ int cycleConditionIndex(Condition c){
 }
 Condition &eventCondition(Step&s,int column){return column?s.eventConditions[column-1]:s.condition;}
 Condition eventCondition(const Step&s,int column){return column?s.eventConditions[column-1]:s.condition;}
-int triggeredNote(const Step&s,uint64_t cycle){
+int triggeredNote(const Step&s,uint64_t cycle,int transpose){
   if(s.note<0)return s.note;
   if(!conditionMatches(s.condition,cycle))return -1;
-  return std::clamp(int(s.note)+(conditionMatches(eventCondition(s,4),cycle)?s.modifier.semitones:0),0,119);
+  bool offset=s.modifier.type==ModifierType::Offset&&conditionMatches(eventCondition(s,4),cycle);
+  return std::clamp(int(s.note)+transpose+(offset?s.modifier.semitones:0),0,119);
 }
 const char *masterName(int i) {
   static const char *names[] = {"ABRASION", "LEGACY", "LEGACY", "CORROSION", "LEGACY", "MODULATION", "LEGACY", "COMPRESSOR", "DELAY", "REVERB", "OUTPUT LEVEL"};
@@ -490,6 +495,8 @@ void Editor::randomizeColumn() {
       if(active[r]) {
         static const int8_t shifts[]={-12,-7,-5,-3,-2,-1,1,2,3,5,7,12};
         s.modifier.semitones=shifts[randomNext(project.seed)%12];
+        // Mostly offsets; about one row in six transposes everything after it.
+        s.modifier.type=randomNext(project.seed)%6==0?ModifierType::Transpose:ModifierType::Offset;
       }
     }
   }
@@ -567,7 +574,7 @@ void Editor::applyToSelection(){
       if(p.fx[k].value!=o.fx[k].value||(p.fx[k].type!=o.fx[k].type&&s.fx[k].value==0))s.fx[k].value=p.fx[k].value;
       if(p.fx[k].length!=o.fx[k].length)s.fx[k].length=p.fx[k].length;
     }else{
-      if(p.modifier.semitones!=o.modifier.semitones||p.modifier.conditionalOnly!=o.modifier.conditionalOnly)s.modifier=p.modifier;
+      if(p.modifier.semitones!=o.modifier.semitones||p.modifier.type!=o.modifier.type)s.modifier=p.modifier;
     }
     auto pc=eventCondition(p,column),oc=eventCondition(o,column);
     if(pc.occurrence!=oc.occurrence||pc.every!=oc.every)eventCondition(s,column)=pc;
@@ -596,7 +603,7 @@ void Editor::randomizeEventParameter(bool wholeColumn){
       if(count)s.note=choices[next()%count];}}
     else if(column==1){auto before=s.instrument;s.instrument=next()%Instruments;if(s.instrument!=before)s.variation=0;}
     else if(column<4){auto &f=s.fx[column-2];if(f.type!=FxType::None)f.value=next()%101;}
-    else s.modifier.semitones=int(next()%49)-24;
+    else {s.modifier.semitones=int(next()%49)-24;if(s.modifier.type==ModifierType::None)s.modifier.type=ModifierType::Offset;}
   };
   auto copy=[&](const Step &from,Step &to){
     if(conditionTab())eventCondition(to,column)=eventCondition(from,column);
@@ -605,7 +612,7 @@ void Editor::randomizeEventParameter(bool wholeColumn){
     else if(column==0)to.note=from.note;
     else if(column==1){to.instrument=from.instrument;to.variation=from.variation;}
     else if(column<4)to.fx[column-2].value=from.fx[column-2].value;
-    else to.modifier.semitones=from.modifier.semitones;
+    else to.modifier=from.modifier;
   };
   if(wholeColumn){
     for(int r=0;r<columnLength(t,column);r++)apply(t.steps[r],false);
@@ -1086,6 +1093,10 @@ void Editor::dispatch(Action a) {
         if(f.type!=FxType::None&&((fresh&&f.value==0)||(!fresh&&f.value==defaultFxMix(before))))f.value=defaultFxMix(f.type);
         effectBanner = true;
         ++effectAnnouncement;
+      } else if (eventTab==0&&column==4) {
+        auto &m=pending.modifier;int d=a==Action::Right?1:-1;
+        m.type=ModifierType((int(m.type)+d+3)%3);
+        say(m.type==ModifierType::None?"MOD EMPTY":m.type==ModifierType::Offset?"OFFSET":"TRANSPOSE");++noticeSerial;
       }
     } else if (a == Action::Up || a == Action::Down) {
       int d = a == Action::Up ? 1 : -1;
@@ -1102,8 +1113,9 @@ void Editor::dispatch(Action a) {
         if(pending.instrument!=before.instrument)pending.variation=0;   // a variation belongs to its instrument
       }
       else if (column == 4) {
+        // An empty cell becomes an OFFSET; LEFT/RIGHT picks OFFSET or TRANSPOSE.
+        if(pending.modifier.type==ModifierType::None)pending.modifier.type=ModifierType::Offset;
         pending.modifier.semitones=std::clamp(int(pending.modifier.semitones)+d,-24,24);
-        pending.modifier.conditionalOnly=true;
       } else {
         auto &f = pending.fx[column - 2];
         f.value = std::clamp(int(f.value) + d * (shift ? 10 : 1), 0, 100);
@@ -1147,7 +1159,10 @@ void Editor::dispatch(Action a) {
       project.tracks[track].mute = !project.tracks[track].mute;
     } else {
       pending = project.tracks[track].steps[row];
-      eventRandomSeed=project.seed;eventRandomized=false;pendingInsertSet=false;
+      // Each edit draws its own stream: without fresh entropy a cancelled edit would
+      // replay the same draws (same effects in the same order) on the next edit.
+      eventRandomSeed=project.seed;if(entropy){randomNext(entropy);eventRandomSeed^=entropy*0x9e3779b9u;}
+      if(!eventRandomSeed)eventRandomSeed=0x9e3779b9u;eventRandomized=false;pendingInsertSet=false;
       if(column==0&&pending.note<0)pending.note=60;
       editOrigin=pending;
       requestAudition();
@@ -1247,7 +1262,7 @@ std::vector<uint8_t> encodeProject(const Project &p) {
       put(b, s.condition.occurrence, 1);
       put(b, s.condition.every, 1);
       put(b, uint8_t(s.modifier.semitones), 1);
-      put(b, s.modifier.conditionalOnly, 1);
+      put(b, uint8_t(s.modifier.type), 1);   // AMAL25: 0 empty, 1 OFFSET, 2 TRANSPOSE
     }
   }
   put(b, p.root, 1);
@@ -1285,7 +1300,7 @@ std::vector<uint8_t> encodeProject(const Project &p) {
   {int count=0;for(const auto&t:p.tracks)for(const auto&s:t.steps)count+=s.variation&&s.instrument<Instruments;
    put(b,count,2);
    for(int tr=0;tr<Tracks;tr++)for(int r=0;r<MaxRows;r++){const auto&s=p.tracks[tr].steps[r];if(s.variation&&s.instrument<Instruments){put(b,tr,1);put(b,r,2);put(b,s.variation,4);}}}
-  std::vector<uint8_t> h={'A','M','A','L',24,0,0,0};put(h,crc(b),4);h.insert(h.end(),b.begin(),b.end());return h;
+  std::vector<uint8_t> h={'A','M','A','L',25,0,0,0};put(h,crc(b),4);h.insert(h.end(),b.begin(),b.end());return h;
 }
 bool saveProject(const Project &p,const std::string &path,std::string &err){
   auto b=encodeProject(p);
@@ -1330,7 +1345,7 @@ bool decodeProject(Project &out,const std::vector<uint8_t>&b,std::string &err){
     err="INVALID PROJECT SIZE";return false;
   }
   if (b.size() != size || std::string(b.begin(), b.begin() + 4) != "AMAL" ||
-      (b[4] < 1 || b[4] > 24) || b[5] || b[6] || b[7]) {
+      (b[4] < 1 || b[4] > 25) || b[5] || b[6] || b[7]) {
     err = "INVALID PROJECT OR VERSION";
     return false;
   }
@@ -1396,12 +1411,16 @@ bool decodeProject(Project &out,const std::vector<uint8_t>&b,std::string &err){
         s.condition.every = get(1);
         s.modifier.semitones = int8_t(get(1));
         auto mode = get(1);
-        s.modifier.conditionalOnly = mode;
+        // Before AMAL25 every MOD cell was an offset (+00 by default): a zero offset did
+        // nothing, so it loads as an empty cell, and any other value as an OFFSET.
+        if(b[4]>=25)s.modifier.type=ModifierType(mode);
+        else s.modifier.type=s.modifier.semitones?ModifierType::Offset:ModifierType::None;
+        if(s.modifier.type==ModifierType::None&&b[4]>=25)ok&=s.modifier.semitones==0;
         ok &= s.condition.every >= 1 && s.condition.every <= 16 &&
               s.condition.occurrence >= 1 &&
               s.condition.occurrence <= s.condition.every &&
               s.modifier.semitones >= -24 && s.modifier.semitones <= 24 &&
-              mode <= 1;
+              mode <= (b[4]>=25?2u:1u);
       }
     }
   }

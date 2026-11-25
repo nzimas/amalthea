@@ -29,7 +29,7 @@ int main(){
   e.action(Action::Enter);e.action(Action::NextTrack);e.action(Action::Up);e.action(Action::Home);check(encodeProject(e.project)==original&&!e.editing,"Home discards pending condition");
  }
  // Independent conditions: NOTE 1:2, INST 2:3, FX1 1:2, FX2 2:2, MOD 1:4.
- Project p=blankProject();auto&t=p.tracks[0];t.length=1;t.instrument=0;auto&s=t.steps[0];s.note=60;s.instrument=1;s.condition={1,2};s.modifier={12,false};eventCondition(s,1)={2,3};eventCondition(s,4)={1,4};
+ Project p=blankProject();auto&t=p.tracks[0];t.length=1;t.instrument=0;auto&s=t.steps[0];s.note=60;s.instrument=1;s.condition={1,2};s.modifier={12,ModifierType::Offset};eventCondition(s,1)={2,3};eventCondition(s,4)={1,4};
  Audio audio;audio.submit(p,true);int notes=0;
  for(int cycle=0;cycle<24;cycle++){tick(audio,cycle);if(cycle%2==0){notes++;check(audio.stats.lastNote[0]==(cycle%4==0?72:60),"MOD follows its own event condition, independent of NOTE");check(audio.stats.lastInstrument[0]==(cycle%3==1?1:0),"INST condition selects override or track default");}check(audio.stats.triggers[0]==unsigned(notes),"NOTE condition gates only notes");}
  // Distinct FX conditions restore matching track defaults without touching peers.

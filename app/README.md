@@ -255,7 +255,8 @@ F1/F2 retains its current page's track/module/pagination function.
 A:B means the event applies on cycle A of every B cycles of that particular column.
 The former shared COND column is removed. NOTE conditions gate note attacks; INST
 conditions choose the explicit instrument or the track default; inactive FX events
-bypass that insert slot; inactive MOD contributes no transposition.
+bypass that insert slot; an inactive OFFSET leaves its note as written, and an inactive
+TRANSPOSE does not change the transposition on that cycle.
 Conditions are independent, with no nesting against another cell's condition.
 FX columns apply insert processors immediately at their own ticks, including to held audio.
 When ticks coincide, all value columns advance before NOTE samples them.
@@ -416,7 +417,15 @@ starts or when the file is removed. App changes never need a root image.
 The two FX slots now select only insert processors. Pan, volume and all five
 sends live in the note-event editor. Diode and Rat Drive are retired; the former
 low/high-pass entries are replaced by a six-mode resonant multimode filter. [Effects and cycle modifier guide](docs/EFFECTS-AND-REFERENCES.md)
-lists effect codes and per-cell cycle examples. MOD displays plain semitones such as `+02`.
+lists effect codes and per-cell cycle examples.
+
+MOD cells start empty (`---`). Editing one, Up/Down sets semitones (an empty cell becomes
+an OFFSET) and Left/Right chooses OFFSET, TRANSPOSE or empty. An OFFSET (`+02`) shifts its
+own row's note. A TRANSPOSE (`T+2`) shifts every note from its row to the end of the MOD
+column's cycle, or until the next TRANSPOSE (`T+0` returns to the written notes); offsets
+add to it. Each MOD cycle starts untransposed, so a TRANSPOSE on step 1 transposes the
+whole sequence, and one conditioned 1:2 transposes every other cycle. Sessions saved
+before build 38 load their `+00` cells as empty.
 Project format 2 imports version 1, activates its first 16 steps and preserves notes,
 instruments, level/pan commands and archived rows. Removed probability/gate/transpose
 commands and the former third/fourth FX slots are omitted during migration. Original
