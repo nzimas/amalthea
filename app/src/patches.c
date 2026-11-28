@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* SPDX-License-Identifier: GPL-3.0-only
  * Adapter for Fugitive's VAP / CHIP / PERC engines; recipes from amalthea_recipes.c. No RT calls. */
 #define HOST 1
@@ -199,8 +200,84 @@ void amalthea_patch_variant(int engine, uint32_t seed, uint32_t variation, int32
         out[j] = pv_move(&E->par[j], v[j], cls, pv_hash(seed, variation, j), logd);
     }
 }
+/* ---------------------------------------------------------------- PERFORMANCE: live moves (Y)
+ * The parameters a variation may move (VAP, PERC, CHIP; never pitch, levels or enums) move live under an LFO:
+ * amount -1 .. 1 (Q15) of the same window a variation uses, deterministically. Recipe engines (3+): none. */
+static uint8_t pv_class_of(int engine, const int32_t *v, uint32_t j)
+{
+    static const int old[] = {E_VAP, E_PERC, E_CHIP};
+    const eng_t *E;
+    if (engine < 0 || engine >= 3) return PV_NO;
+    E = eng_of((uint32_t)old[engine]);
+    if (j >= E->npar || j >= ENG_NPAR || E->par[j].is_enum) return PV_NO;
+    if (old[engine] == E_VAP) return pv_vap_class(v, j, pv_vap_frozen(v));
+    if (old[engine] == E_CHIP) return pv_chip_class(v, j);
+    if (j == 30 || j == 31) return PV_NO;                                /* (the hihat's band moves as a pair) */
+    return pv_perc_class(v, j);
+}
+int amalthea_patch_movable(int engine, const int32_t *v, uint32_t j)
+{
+    static const int old[] = {E_VAP, E_PERC, E_CHIP};
+    uint8_t cls = pv_class_of(engine, v, j);
+    const eng_par_t *p;
+    if (cls == PV_NO) return 0;
+    p = &eng_of((uint32_t)old[engine])->par[j];
+    if (v[j] <= p->lo || v[j] >= p->hi) return 0;                        /* at an end: a switch */
+    if ((cls == PV_SLIN || cls == PV_SLOG) && v[j] == 0) return 0;
+    return 1;
+}
+/* "SECTION NAME" (several sections have a DECAY), for the screen; UI thread only (a static buffer) */
+const char *amalthea_patch_parameter_name(int engine, uint32_t j)
+{
+    static const int old[] = {E_VAP, E_PERC, E_CHIP};
+    static char text[48];
+    const eng_t *E;
+    if (engine < 0 || engine >= 3) return "";
+    E = eng_of((uint32_t)old[engine]);
+    if (j >= E->npar) return "";
+    if (E->section && E->par[j].section < E->nsection && E->section[E->par[j].section])
+        snprintf(text, sizeof text, "%s %s", E->section[E->par[j].section], E->par[j].name);
+    else snprintf(text, sizeof text, "%s", E->par[j].name);
+    return text;
+}
+int32_t amalthea_patch_move(int engine, const int32_t *v, uint32_t j, int32_t amount)
+{
+    static const int old[] = {E_VAP, E_PERC, E_CHIP};
+    uint8_t cls;
+    const eng_par_t *p;
+    int32_t x, sg = 1, lo, hi;
+    int64_t y;
+    if (!amalthea_patch_movable(engine, v, j)) return v[j];
+    cls = pv_class_of(engine, v, j);
+    p = &eng_of((uint32_t)old[engine])->par[j];
+    x = v[j]; lo = p->lo; hi = p->hi;
+    if (amount > 32767) amount = 32767;
+    if (amount < -32767) amount = -32767;
+    if (cls == PV_SLIN || cls == PV_SLOG) {
+        if (x < 0) { sg = -1; x = -x; lo = 0; hi = -p->lo; }
+        else lo = 0;
+    }
+    if (cls == PV_LOG || cls == PV_SLOG) {
+        y = ((int64_t)x * exp2_q16((int32_t)(((int64_t)PV_LOGW * amount) >> 15))) >> 16;
+        if (y < 1) y = 1;
+    } else {
+        int64_t w = ((int64_t)(hi - lo) * (cls == PV_RES ? PV_RESW : PV_LINW)) >> 16;
+        y = x + ((w * amount) >> 15);
+    }
+    if (y < lo) y = lo;
+    if (y > hi) y = hi;
+    if (cls == PV_RES && y > x && y > PV_RESCAP) y = x > PV_RESCAP ? x : PV_RESCAP;
+    if ((cls == PV_SLIN || cls == PV_SLOG) && y == 0) y = 1;
+    return par_clamp(p, (int32_t)(sg * y));
+}
+const char *amalthea_obrador_family(uint32_t);
+const char *amalthea_rings_family(unsigned);
+const char *amalthea_plaits_family(unsigned);
 const char *amalthea_family(int engine,uint32_t seed) {
   if(engine==11)return seed?amalthea_bigorna_drum_family(seed):"DEFAULT";
+  if(engine==12)return amalthea_obrador_family(seed);
+  if(engine==13)return amalthea_rings_family(seed);
+  if(engine==14)return amalthea_plaits_family(seed);
   if(engine>=6)return amalthea_native_family(engine,seed);
   if(engine==3)return amalthea_fiber_family(seed);
   if(engine>=4)return amalthea_bigorna_family(engine==4,seed);

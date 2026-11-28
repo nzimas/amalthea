@@ -1,6 +1,7 @@
 // FUNC + hold X on the INSTRUMENT column: per-row instrument variations.
 #include "audio.hpp"
 #include "native_engines.hpp"
+#include "legacy_project.hpp"
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -11,13 +12,13 @@
 #include <vector>
 extern "C" {
 #include "eng.h"
-extern const eng_t ENG_VAP,ENG_PERC,ENG_CHIP,ENG_FIBER,ENG_HIVE,ENG_OP4,ENG_ANIMA,ENG_RUSSOLO,ENG_BAYAREA,ENG_RESURGENT,ENG_CALIGULA,ENG_FMDRUM;
+extern const eng_t ENG_VAP,ENG_PERC,ENG_CHIP,ENG_FIBER,ENG_HIVE,ENG_OP4,ENG_ANIMA,ENG_RUSSOLO,ENG_BAYAREA,ENG_RESURGENT,ENG_CALIGULA,ENG_FMDRUM,ENG_OBRADOR,ENG_RINGS,ENG_PLAITS;
 void amalthea_patch(int,uint32_t,int32_t*);
 void amalthea_patch_variant(int,uint32_t,uint32_t,int32_t*);
 }
 using namespace amalthea;
 static void require(bool ok,const char *why){if(!ok){fprintf(stderr,"FAIL: %s\n",why);exit(1);}}
-static const eng_t *bank[]={&ENG_VAP,&ENG_PERC,&ENG_CHIP,&ENG_FIBER,&ENG_HIVE,&ENG_OP4,&ENG_ANIMA,&ENG_RUSSOLO,&ENG_BAYAREA,&ENG_RESURGENT,&ENG_CALIGULA,&ENG_FMDRUM};
+static const eng_t *bank[]={&ENG_VAP,&ENG_PERC,&ENG_CHIP,&ENG_FIBER,&ENG_HIVE,&ENG_OP4,&ENG_ANIMA,&ENG_RUSSOLO,&ENG_BAYAREA,&ENG_RESURGENT,&ENG_CALIGULA,&ENG_FMDRUM,&ENG_OBRADOR,&ENG_RINGS,&ENG_PLAITS};
 
 // Renders one held note of a cooked patch (mono, left channel).
 static std::vector<float> renderNote(int e,const void *patch,int note,int blocks){
@@ -109,7 +110,7 @@ int main(){
     require(encodeProject(blankProject()).size()+2*7==bytes.size(),"only varied rows are stored");
     require(q.tracks[3].steps[7].variation==0xdeadbeefu&&q.tracks[11].steps[255].variation==7&&q.tracks[0].steps[0].variation==0,"variations round-trip");
     // An AMAL23 payload (no variation tail) still loads, without variations.
-    auto old=bytes;old.resize(old.size()-2-2*7);old[4]=23;
+    auto old=twelveSlotBytes(bytes);old.resize(old.size()-2-2*7);old[4]=23;
     uint32_t crc=~0u;for(size_t i=12;i<old.size();i++){crc^=old[i];for(int j=0;j<8;j++)crc=(crc>>1)^(0xedb88320u&uint32_t(-int(crc&1)));}
     crc=~crc;for(int j=0;j<4;j++)old[8+j]=(crc>>(8*j))&255;
     Project r;require(decodeProject(r,old,err),"AMAL23 still decodes");

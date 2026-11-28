@@ -244,22 +244,28 @@ struct NativeVoice {
  amalthea_rt::Arena arena{memory.p,ArenaBytes};
  static constexpr size_t StateBytes=std::max({sizeof(va::Engine),sizeof(vb::Voice),sizeof(vc::Player),sizeof(vr::Voice),sizeof(Noisferatu)});
  alignas(16) unsigned char storage[StateBytes];
+ void *foreign=nullptr;NativeRetrigger foreignRetrigger=nullptr;   // RINGS / PLAITS state in the arena
  int engine=-1,family=0,quiet=0;bool released=false;float hz=220,velocity=1,envelope=0,dc=0,held=0;double phase=1;uint32_t plaitsRandom=1;uint64_t frames=0;
  template<class T>T &as(){return *reinterpret_cast<T*>(storage);}
- void destroy(){switch(engine){case 6:as<va::Engine>().~Engine();break;case 7:as<Noisferatu>().~Noisferatu();break;case 8:as<vb::Voice>().~Voice();break;case 9:as<vr::Voice>().~Voice();break;case 10:as<vc::Player>().~Player();break;}engine=-1;}
+ void destroy(){foreign=nullptr;foreignRetrigger=nullptr;switch(engine){case 6:as<va::Engine>().~Engine();break;case 7:as<Noisferatu>().~Noisferatu();break;case 8:as<vb::Voice>().~Voice();break;case 9:as<vr::Voice>().~Voice();break;case 10:as<vc::Player>().~Player();break;}engine=-1;}
  ~NativeVoice(){destroy();}
 };
 void NativeDeleter::operator()(NativeVoice*p)const{delete p;}
 NativeVoicePtr makeNativeVoice(){return NativeVoicePtr(new NativeVoice);}
 void bindNativeVoice(void *data,NativeVoice*p){std::memcpy(data,&p,sizeof p);}
 void retriggerNativeVoice(void *data,int note,int velocity){
- NativeVoice *p;std::memcpy(&p,data,sizeof p);auto &v=*p;v.hz=440.f*std::exp2((note-69.f)/12.f);v.velocity=velocity/127.f;v.released=false;v.quiet=0;
+ NativeVoice *p;std::memcpy(&p,data,sizeof p);auto &v=*p;if(v.foreignRetrigger){v.foreignRetrigger(v.foreign,note,velocity);return;}v.hz=440.f*std::exp2((note-69.f)/12.f);v.velocity=velocity/127.f;v.released=false;v.quiet=0;
  if(v.engine==6){v.as<va::Engine>().setNote(v.hz);v.as<va::Engine>().autonomous(true);v.as<va::Engine>().strike();}
  if(v.engine==8)v.as<vb::Voice>().noteOn(v.hz,v.velocity);
  if(v.engine==9)v.as<vr::Voice>().noteOn(v.velocity);
  if(v.engine==10){auto &s=v.as<vc::Player>();s.transpose=v.hz/110.;s.setPlaying(true);s.strike();}
 }
 size_t nativeVoiceArenaUsed(const NativeVoice*p){return p->arena.used;}
+void *nativeVoiceClaim(void *data,size_t bytes,NativeRetrigger retrigger){
+ NativeVoice *p;std::memcpy(&p,data,sizeof p);p->destroy();p->arena.used=0;
+ p->foreign=p->arena.take(bytes,64);p->foreignRetrigger=retrigger;return p->foreign;
+}
+void *nativeVoiceState(void *data){NativeVoice *p;std::memcpy(&p,data,sizeof p);return p->foreign;}
 }
 namespace {
 amalthea::NativeVoice &voice(void *data){amalthea::NativeVoice*p;std::memcpy(&p,data,sizeof p);return *p;}

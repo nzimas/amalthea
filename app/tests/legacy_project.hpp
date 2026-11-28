@@ -1,8 +1,36 @@
 #pragma once
 #include "core.hpp"
 namespace amalthea {
+inline void legacyCrc(std::vector<uint8_t> &b){uint32_t crc=~0u;for(size_t i=12;i<b.size();i++){crc^=b[i];for(int j=0;j<8;j++)crc=(crc>>1)^(0xedb88320u&uint32_t(-int(crc&1)));}crc=~crc;for(int j=0;j<4;j++)b[8+j]=(crc>>(8*j))&255;}
+// A current (AMAL29, fifteen-slot) payload rewritten as AMAL25 with the twelve slots it had
+// before OBRADOR, RINGS and PLAITS. Other payloads are returned unchanged.
+inline std::vector<uint8_t> twelveSlotBytes(std::vector<uint8_t> b) {
+ if(b[4]==29){b.resize(b.size()-2);b[4]=28;}   // RANDOM MOD targets (AMAL29; fixtures hold none)
+ if(b[4]==28){b.resize(b.size()-2);b[4]=27;}   // per-parameter conditions (AMAL28; fixtures hold none)
+ if(b[4]==27){b.resize(b.size()-2);b[4]=26;}   // RANDOM FX cells (AMAL27; fixtures hold none)
+ if(b[4]!=26)return b;
+ constexpr int Old=12;
+ const size_t patches=12+8+Tracks*(3+MaxRows*11)+2;
+ const size_t macroBytes=MacroCount*MacroParameters+Tracks*(MacroCount+1+MacroCount*MacroParameters);
+ const size_t tp=patches+Instruments*5+MasterModules*4+Tracks*6+Tracks*2*InsertSettingsBytes+Tracks*6*3+4+Tracks*2*7+4+macroBytes+EventConditionBytes;
+ for(int t=Tracks-1;t>=0;t--){
+  size_t i=tp+t*(2+Instruments*5);
+  b[i+1]&=uint8_t((1u<<(Old-8))-1);
+  b.erase(b.begin()+i+2+Old*5,b.begin()+i+2+Instruments*5);
+ }
+ b.erase(b.begin()+patches+Old*5,b.begin()+patches+Instruments*5);
+ for(int t=0;t<Tracks;t++)for(int r=0;r<MaxRows;r++){
+  auto i=12+8+t*(3+MaxRows*11)+3+r*11+2;
+  if(b[i]!=NoInstrument&&b[i]>=Old)b[i]=Old-1;
+ }
+ const size_t settings=patches+Old*5+MasterModules*4;
+ for(int t=0;t<Tracks;t++)if(b[settings+t*6+3]>=Old)b[settings+t*6+3]=Old-1;
+ b[4]=25;legacyCrc(b);
+ return b;
+}
 constexpr int LegacyTrackPatchBytes=Tracks*(1+8*5);
 inline std::vector<uint8_t> legacyBankBytes(std::vector<uint8_t> b) {
+ b=twelveSlotBytes(b);constexpr int Instruments=12,TrackPatchBytes=Tracks*(2+Instruments*5);
  if(b[4]>=24)b.resize(b.size()-2); // row variations (AMAL24; fixtures hold none)
  if(b[4]>=23)b.resize(b.size()-2-Tracks*2*NativeCount*NativeParams); // native profiles (AMAL23)
  if(b[4]>=22)b.resize(b.size()-ModulationSettingsBytes); // flanger/phaser profiles
@@ -33,8 +61,9 @@ inline std::vector<uint8_t> legacyBankBytes(std::vector<uint8_t> b) {
  crc=~crc;for(int j=0;j<4;j++)b[8+j]=(crc>>(8*j))&255;
  return b;
 }
-// A current (AMAL18, 12-slot) payload rewritten as AMAL17 with eleven instrument slots.
+// A current payload rewritten as AMAL17 with eleven instrument slots.
 inline std::vector<uint8_t> elevenSlotBytes(std::vector<uint8_t> b) {
+ b=twelveSlotBytes(b);constexpr int Instruments=12,TrackPatchBytes=Tracks*(2+Instruments*5);
  if(b[4]>=24)b.resize(b.size()-2); // row variations (AMAL24; fixtures hold none)
  if(b[4]>=23)b.resize(b.size()-2-Tracks*2*NativeCount*NativeParams); // native profiles (AMAL23)
  if(b[4]>=22)b.resize(b.size()-ModulationSettingsBytes); // flanger/phaser profiles (AMAL22)

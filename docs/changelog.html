@@ -47,6 +47,75 @@
   <div class="content">
     <main>
 <h1>Changelog</h1>
+<h2 id="build-56-lifeblood-mastering-performance-mode-a-condition-for-every-parameter-random-fx-and-mod">Build 56 — LIFEBLOOD mastering, PERFORMANCE mode, a condition for every parameter, RANDOM FX and MOD</h2>
+<ul>
+<li>LIFEBLOOD's PATH gains ANY, the new default: each time X grows a network it takes ABSTRACT or RHYTHMIC at even odds (a chosen CHARACTER sets its own path).</li>
+<li>LIFEBLOOD session settings gain tabs (F1 / F2, two shown at a time): GENERAL, COMP and EQ. Together these form a mastering stage on the whole output, before the limiter: a 10-band EQ (Cytomic SVF bells, with shelves at 31 Hz and 16 kHz) into a stereo bus compressor (feedforward, soft knee, decoupled peak detector, SC FILTER, AUTO release and makeup, parallel MIX, live gain reduction). Both are off by default. Each has a PROFILE row with starting points for power noise, rhythmic noise, industrial techno, synthwave, dark ambient, acousmatic and textural work. Sessions are AMLB3; older ones load with mastering off.</li>
+<li>MOD column: a third modifier, RANDOM (<code>RND</code>). Each time it is applied it redraws up to three NOTE column parameters of its row's note, chosen on a new TARGETS tab: ANY (the default, one parameter at random each time; the other two targets greyed out) or NOTE, LENGTH, PAN, VOLUME and the sends. A random NOTE stays in the session scale and root note, within an octave of the written note. Sessions are AMAL29 (RANDOM cells' targets).</li>
+<li>PERFORMANCE mode (tracker): Y enters it, F1 (lit yellow while in the mode) leaves it; SHIFT + Y now opens the master effects. Nothing done in the mode is written to the pattern: leaving drops all of it and the pattern plays as stored. Four tiles show what each button has done, placed as the buttons are (counterclockwise from the top left: X, Y, B, A); the header line shows the last press.</li>
+<li>F1 / F2 lights: dim blue in the tracker (they move between tracks); in PERFORMANCE mode F1 alone, bright yellow (it leaves the mode); off in the other appliances and the menu.
+<ul>
+<li>X: a chain of up to four effects (a COMBO after Vascular: GRIND, ACID, CAVERN, HAUNT, LURCH, CORRODE, each a fixed order of effect families with its parts drawn at random) on a stretch of rows of one to three tracks that hold notes, after their own FX. Kept within the Brick's audio budget (LIFEBLOOD's measured costs).</li>
+<li>B: new parameters for the chain's effects. A: six LFOs (sine or sample and hold, each with its own rate and depth) on the chain's parameters.</li>
+<li>Y: six LFOs on the instruments of one to three tracks holding notes (their default instrument), independent of the chain. VAP, PERC and CHIP: on their timbre parameters (those a row variation may move, never pitch, level or a switch), live, even on held notes. Every other engine sets its sound when a note starts, so its LFO walks a bank of up to eight of its own variations, note by note.</li>
+<li>Every button is a toggle: on, off (bypass), then on with a new draw.</li>
+</ul></li>
+<li>Step editor: only scrolling the note itself sounds it (LENGTH, the locks and every condition change silently). Scrolling an effect or its DRY/WET shows it large.</li>
+</ul>
+<ul>
+<li>Every parameter of a step has its own trigger condition, independent of the step's other parameters: in the NOTE column the note, LENGTH, PAN, VOLUME, the sends and the three macro sends; in the FX columns the effect (with its DRY/WET MIX), LENGTH and RANDOM; INST and MOD keep their one condition. A parameter whose condition is not met that cycle plays as if unset: a lock takes the track's value, LENGTH is one step, RANDOM is NO; no note or effect plays when the note's or effect's own condition is not met.</li>
+<li>Step editor: the CONDITION tabs are gone. Every tab holds its value and then the parameter's own CONDITION; LEFT / RIGHT select the field (it fills), UP / DOWN change it, START commits the step and A cancels it. FX's first tab holds EFFECT, DRY/WET and CONDITION (UP / DOWN on EFFECT choose the effect); MOD's holds TYPE, SEMITONES and CONDITION. A NOTE lock goes back to the track's value (TRACK) one step below 0, and UP from TRACK starts at the track's value. F1 / F2 change tabs and keep CONDITION selected if it was. Hold X randomizes the selected field (value or condition).</li>
+<li>SHIFT + hold X on the NOTE column draws a condition for each parameter separately.</li>
+<li>Sessions are AMAL28 (per-parameter conditions are stored); older sessions play exactly as before, every parameter following its cell.</li>
+</ul>
+<ul>
+<li>The FX step editor has a tab RANDOM (YES / NO, default NO), after DRY/WET MIX and LENGTH. With YES, each time the step plays (whenever its CONDITION lets it) the chosen effect takes a newly drawn set of its own parameters, never the same draw twice in a row; the step's DRY/WET MIX stays as set. A RANDOM cell shows a small square after it in the FX column.</li>
+<li>The draws are made off the audio thread, held within the Brick's audio budget like other random effect draws, and shared out of 48 per pattern among the (track, slot, effect) combinations that use RANDOM; they are redrawn whenever the pattern is randomized.</li>
+<li>RANDOM cells are stored (AMAL27); older sessions load with RANDOM off.</li>
+</ul>
+<h2 id="build-46-pan-without-clicks">Build 46 — Pan without clicks</h2>
+<ul>
+<li>A note's PAN, VOLUME and sends (the NOTE column's parameter tabs) now hold from the note's start until the next note plays. Rows after it, whether empty, tied, note-off or carrying values of their own, no longer move a note that is still sounding. Before, every row the NOTE column passed applied its own values (or the track's, for a row without any), so a ringing note could jump between hard left and hard right in mid-sound.</li>
+<li>Randomizing a NOTE-column parameter tab for the whole column (PAN, VOLUME, the sends, LENGTH, CONDITION) writes only rows that hold a note.</li>
+<li>Each track's level and pan glide instead of stepping: a full swing takes 5 ms, in a straight line that lands exactly on the new value. This removes the click when consecutive notes are panned to opposite sides, and when an FX-column VOLUME or PAN event changes them.</li>
+</ul>
+<h2 id="build-45-plaits-notes-end-with-their-length">Build 45 — PLAITS notes end with their length</h2>
+<ul>
+<li>PLAITS ignored note length: a pinged model's LPG followed only DECAY, and the gated and drone families released over 8–25 s. Every PLAITS note now ends at its length in every model: from the note's end the sound falls to -60 dB in the recipe's release time (0.06–0.3 s for pinged models and drums, up to 1.5 s for pads and drones). While the note lasts, the LPG and DECAY shape it as before. Attack times are now times to full level.</li>
+<li>STEEL DRONE and GLASS DUST excite their string and particles more densely, so short notes are heard.</li>
+</ul>
+<h2 id="build-44-obrador-rings-and-plaits-fx-is-now-fx-rack">Build 44 — OBRADOR, RINGS and PLAITS; FX is now FX RACK</h2>
+<ul>
+<li>Three new instruments, slots 13–15 (<code>docs/ENGINE-PORTS.md</code>):
+<ul>
+<li><b>OBRADOR</b>, the Oberheim-style polysynth voice from Tonitor, its fixed-point code unchanged and sample-identical to Tonitor's. 20 families: Tonitor's ten kinds on its OPEN, AMBIENT and EXP paths (strings, brass, PWM pads, basses, sync leads, notch sweeps, metal, drones, keys, swells).</li>
+<li><b>RINGS</b>, Mutable Instruments Rings: all six resonator models, polyphony 1–4, the internal exciter struck by each note or a bow into its input, chords in the quantized model, the FREQUENCY knob, and the Disastrous Peace easter egg with its six effects. Odd strings left, even right. 26 families.</li>
+<li><b>PLAITS</b>, Mutable Instruments Plaits 1.2: all 24 models with HARMONICS, TIMBRE, MORPH, the three attenuverters, DECAY and LPG COLOUR; the LPG pinged by the note, following its gate, or bypassed for drones. 47 families, one model each, spread so every model is drawn about equally.</li>
+<li>Rings and Plaits run at their own 48 kHz and are resampled to 44.1 kHz. Like the other native instruments, one runs per track and slot and each note retriggers it.</li>
+</ul></li>
+<li>Sessions are AMAL26 (fifteen instrument slots). AMAL25 and older load; their tracks gain the three new slots with default sounds.</li>
+<li>The FX appliance is now called <b>FX RACK</b> on the home screen, its header, its session pages and notices, and in the documentation. Its tile reads USB AUDIO EFFECTS.</li>
+</ul>
+<h2 id="build-43-the-headphone-jacks-stereo-image-the-right-way-round">Build 43 — The headphone jack's stereo image the right way round</h2>
+<ul>
+<li>The Brick's codec plays the first channel on the jack's right side, so every appliance came out mirrored: panned right sounded left. Frames now go to the codec with left and right exchanged. USB audio out was already correct and is unchanged.</li>
+</ul>
+<h2 id="build-42-lifeblood-starts-half-wet">Build 42 — LIFEBLOOD starts half wet</h2>
+<ul>
+<li>A new LIFEBLOOD session's MIX starts at 50% instead of 100%. Saved sessions keep their own MIX.</li>
+</ul>
+<h2 id="build-41-lifeblood-runs-the-fm1s-own-effects-after-the-network">Build 41 — LIFEBLOOD runs the FM1's own effects after the network</h2>
+<ul>
+<li>With BIGORNA (build 122) in USB TRACKS mode, LIFEBLOOD runs the FM1's own CHORUS, DELAY, REVERB, master compressor and output ceiling after the network: BIGORNA's <code>fx.c</code>, compiled unchanged, from the state BIGORNA broadcasts (parameters, tempo, each track's sends with their step locks, the returns' ducking). The FM1's USB tracks are taken before its sends, so until now its reverb and delay tails were missing and sounds came through dry and cut short.</li>
+<li>Bypassed, LIFEBLOOD is the FM1's own mix: its stems, pans, effects, compressor and ceiling. Through the network, each node sends as the blend of the tracks that feed it.</li>
+<li>Changes are applied when the audio they arrived with plays, not the input buffer's ~40 ms early. The header shows <code>+ FX</code> while the stage runs.</li>
+</ul>
+<h2 id="build-40-clean-input-and-output-in-fx-and-lifeblood">Build 40 — Clean input and output in FX and LIFEBLOOD</h2>
+<ul>
+<li>The FM1's USB audio is read with a 32-tap windowed-sinc interpolator instead of linear interpolation. The FM1's clock and the Brick's differ slightly, so the input is read at a slowly sweeping fractional position; linear interpolation made that a moving low-pass (up to -2.4 dB at 10 kHz and -11 dB at 18 kHz, swept several times a second). It is now flat within 0.005 dB to 18 kHz at every position.</li>
+<li>The output limiter looks 1.5 ms ahead and glides its gain down before a peak, recovering over 150 ms, instead of cutting in within one sample and recovering in 20 ms. It acts only above -0.2 dBFS; below that the output is untouched.</li>
+<li>LIFEBLOOD's separate tracks enter at unity with the FM1's own mixer law (0.707 at the centre), so the dry sum equals the FM1's mix bus; before, they were 1 dB hotter, which drove the limiter more often.</li>
+</ul>
 <h2 id="build-39-lifeblood-follows-the-fm1s-pans-and-clock">Build 39 — LIFEBLOOD follows the FM1's pans and clock</h2>
 <ul>
 <li>LIFEBLOOD with separate FM1 tracks: each track is placed where the FM1 pans it, instead of a fixed spread by track number (track 1 was well to the left). The FM1's stems are taken before its pan, so LIFEBLOOD reads each track's pan from CC 10 on MIDI channels 1–6 (BIGORNA build 121 sends it in USB TRACKS mode), with the FM1's constant-power law, gliding over 50 ms. A track whose pan has not been received is centred. Tracks keep their place whether they pass straight to OUT or through the network.</li>
@@ -359,7 +428,7 @@
 </ul>
     </main>
     <footer>
-      <p>Amalthea build 39. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
+      <p>Amalthea build 56. Developed by <a href="https://nunozimas.com">Nuno Zimas</a>. Free software under the
         <a href="https://github.com/nzimas/amalthea/blob/main/LICENSE">GNU GPL v3</a>. Not affiliated with TRIMUI.</p>
       <form class="donate donate-foot" action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
         <input type="hidden" name="cmd" value="_xclick">

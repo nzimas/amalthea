@@ -1,7 +1,7 @@
 # Appliance shell and parameter randomization — 0.19.0
 
 The current executable contains the appliance router and Tracker. Future appliances
-can be routed from the home grid; the FX tile currently opens a clearly labelled
+can be routed from the home grid; the FX RACK tile currently opens a clearly labelled
 development preview and does not claim USB audio processing support. No kernel,
 bootloader or stock executable is changed. The existing boot helper displays the
 new `assets/identity/ready.png`; the native renderer then displays the same identity
@@ -22,7 +22,7 @@ other columns, other tracks and hidden rows. The bulk action is a single checkpo
 Its current-row result is copied into the pending event without disturbing other
 pending fields. Notes retain existing onset/rest structure in bulk operation and
 obey the chosen scale/root, including at the lower pitch boundary. Volume has a10%
-floor. Condition choices remain positive occurrence/cycle pairs. FX randomization
+floor. Condition choices remain positive occurrence/cycle pairs. FX RACK randomization
 on its value tab retains the insert type and changes amount only.
 
 Validation: all28 tests pass on Mac and ARM Linux. The new appliance/randomization

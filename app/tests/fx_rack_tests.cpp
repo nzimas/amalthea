@@ -36,6 +36,13 @@ int main(int argc,char**argv){
   check(c.locked&&c.tempo==127&&std::abs(c.bpm-127)<.5,"bursts of USB MIDI pulses keep the FM1's tempo");
   int held=c.tempo;double base=1+480*60./127/24;for(int n=1;n<=96;n++)c.byte(0xf8,read(base+n*60./127.4/24));check(c.tempo==held,"jitter under 0.6 BPM does not retune the effects");
   base+=96*60./127.4/24;for(int n=1;n<=60;n++)c.byte(0xf8,read(base+n*60./90/24));check(c.tempo==90,"a tempo change on the FM1 is followed within a beat or two");}
+ {// BIGORNA's effects state (SysEx F0 7D 46 42 ..), real time between its bytes, and a broken one ignored.
+  MidiFxMirror m;std::vector<uint8_t> fx{0xF0,0x7D,0x46,0x42,1,1};for(int k=0;k<30;k++)fx.push_back(uint8_t(k+1));fx.push_back(1275>>7);fx.push_back(1275&127);fx.push_back(0xF7);
+  bool got=false;for(size_t i=0;i<fx.size();i++){got=m.byte(fx[i])||got;if(i==9)m.byte(0xF8);}
+  check(got&&m.msg.kind==1&&m.msg.fx[0]==1&&m.msg.fx[29]==30&&m.msg.bpm10==1275,"the effects' state parsed");
+  std::vector<uint8_t> sd{0xF0,0x7D,0x46,0x42,2};for(int k=0;k<18;k++){int v=k==8?16383:k==2?8192:0;sd.push_back(uint8_t(v>>7));sd.push_back(uint8_t(v&127));}sd.push_back(0xF7);
+  got=false;for(auto b:sd)got=m.byte(b)||got;check(got&&m.msg.kind==2&&m.msg.sends[8]==32768&&m.msg.sends[2]==16384&&m.msg.sends[0]==0,"the sends parsed (16383: all of it)");
+  got=false;for(uint8_t b:{0xF0,0x7D,0x46,0x42,2,1,0x90,60,100})got=m.byte(b)||got;check(!got,"a message cut short by another status is ignored");}
  {// The pan of each FM1 track arrives as CC 10 on channels 1 .. 6, running status and real time between.
   MidiTrackPan p;for(uint8_t b:{0xB0,10,64,0xF8,10,0,0xB5,0x07,100,10,127,0x93,60,100,0xBA,10,5})p.byte(b);
   check(p.pan[0]==0&&p.pan[5]==127&&p.pan[1]==-1&&p.pan[3]==-1,"track pans from CC 10, others not yet heard");
@@ -111,7 +118,8 @@ int main(int argc,char**argv){
  audio.midi(0xfa,1);for(int n=1;n<=48;n++)audio.midi(0xf8,1+n*60./90/24);audio.midi(0xfc,3);audio.render(out,256);check(stats.usbClock&&!stats.usbRunning&&stats.fxStep[0]==-1,"external stop takes precedence over internal run");
  stats.usbClock=false;audio.render(out,256);check(stats.fxStep[0]>=0,"external clock loss automatically resumes session tempo");
  // Actual stereo input passes through the per-channel router into the physical stereo mix.
- FxRack dry;dry.levels.fill(100);check(audio.submit(dry,DeviceSettings{}),"dry rack queued");std::vector<float> input(2048*12,0);for(int i=0;i<2048;i++){input[i*12+4]=.1f;input[i*12+5]=.2f;}audio.feed(input.data(),2048,6,44100);audio.render(out,256);double l=0,r=0;for(int i=0;i<256;i++){l+=out[i*2];r+=out[i*2+1];}check(l>15&&r>30&&std::abs(r/l-2)<.001,"input lane3 isolated and stereo preserved");
+ FxRack dry;dry.levels.fill(100);check(audio.submit(dry,DeviceSettings{}),"dry rack queued");std::vector<float> input(2048*12,0);for(int i=0;i<2048;i++){input[i*12+4]=.1f;input[i*12+5]=.2f;}audio.feed(input.data(),2048,6,44100);audio.render(out,256);audio.render(out,256);double l=0,r=0;   // (the second block: past the limiter's 1.5 ms look-ahead)
+ for(int i=0;i<256;i++){l+=out[i*2];r+=out[i*2+1];}check(l>15&&r>30&&std::abs(r/l-2)<.001,"input lane3 isolated and stereo preserved");
  FxRack wet=dry;wet.slots[4].effect={FxType::Fuzz,100};check(audio.submit(wet,DeviceSettings{}),"shared FX prepared on producer thread");audio.render(out,256);double changed=0;for(float v:out){check(std::isfinite(v),"processed output finite");changed+=std::abs(v);}check(changed>0,"real shared effect processes streamed input");
  // A running sequence applies the effect only on triggered steps: empty steps pass dry.
  {AudioStats dryStats,emptyStats,fullStats,plainStats;FxAudio dryAudio(dryStats),empty(emptyStats),full(fullStats),plainWet(plainStats);
@@ -137,7 +145,8 @@ int main(int argc,char**argv){
   recovery.inputDiscontinuity();recovery.render(block,256);
   for(float v:block)check(v==0,"recovery drops stale queued ingress before re-priming");
   recovery.feed(after.data(),2048,1,44100);recovery.render(block,256);
-  for(int i=128;i<512;i++)check(block[i]<-.02f,"post-recovery input resumes without stale pre-fault samples");
+  // (from frame 128: the input fades in over 128 frames, behind the limiter's 64-frame look-ahead)
+  for(int i=256;i<512;i++)check(block[i]<-.02f,"post-recovery input resumes without stale pre-fault samples");
   check(recoveryStats.usbOverruns==0,"recovery does not overflow ingress");
  }
  // Simulate USB being delivered in 35 ms bursts, independently of codec callbacks.

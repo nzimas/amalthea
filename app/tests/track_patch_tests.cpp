@@ -12,10 +12,11 @@ int main(){
  // Every engine is directly reachable in the instrument editor on a fresh session.
  Editor bank;bank.project=blankProject();bank.column=1;bank.action(Action::Enter);
  for(int slot=0;slot<Instruments;slot++){
-  bank.action(Action::Up);check(bank.pending.instrument==slot,"all twelve instrument slots selectable");
+  bank.action(Action::Up);check(bank.pending.instrument==slot,"all fifteen instrument slots selectable");
   check(trackPatch(bank.project,0,slot).engine==slot,"unique default engine per instrument");
  }
- bank.action(Action::Enter);check(bank.project.tracks[0].steps[0].instrument==11&&trackPatch(bank.project,0,11).engine==FmDrumEngine,"instrument twelve (FM DRUM) commits");
+ bank.action(Action::Enter);check(bank.project.tracks[0].steps[0].instrument==14&&trackPatch(bank.project,0,14).engine==PlaitsEngine,"instrument fifteen (PLAITS) commits");
+ check(trackPatch(bank.project,0,11).engine==FmDrumEngine&&trackPatch(bank.project,0,12).engine==ObradorEngine&&trackPatch(bank.project,0,13).engine==RingsEngine,"slots 12-14: FM DRUM, OBRADOR, RINGS");
  for(int track=0;track<Tracks;track++)for(int slot=0;slot<Instruments;slot++){
   auto &patch=editTrackPatch(bank.project,track,slot);patch.seed=1000+track*Instruments+slot;
  }

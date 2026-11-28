@@ -91,7 +91,7 @@ int main() {
       for(int r=0;r<16;r++){int n=dr.project.tracks[0].steps[r].note;if(n>=0){hits++;require(n>=36&&n<=84,"FM DRUM hits stay near the recipe pitch");}}
       require(dr.status.rfind("HITS",0)==0&&hits==8,"FM DRUM track draws a one-voice rhythm at the set density");
     }
-    {Editor quiet;quiet.project=blankProject();quiet.column=2;auto serial=quiet.auditionSerial;quiet.action(Action::Enter);quiet.action(Action::Right);
+    {Editor quiet;quiet.project=blankProject();quiet.column=2;auto serial=quiet.auditionSerial;quiet.action(Action::Enter);quiet.action(Action::Up);
      require(quiet.editing&&quiet.auditionSerial==serial,"editing an FX row never sounds a note");
      Editor empty;empty.project=blankProject();empty.column=1;serial=empty.auditionSerial;empty.action(Action::Enter);empty.action(Action::Up);
      require(empty.auditionSerial==serial,"editing the instrument of an empty row stays silent");}
@@ -106,10 +106,10 @@ int main() {
      auto serial=pop.noticeSerial;pop.action(Action::Down);require(pop.noticeSerial==serial,"moving the focus raises no popup");}
     {Project sc=blankProject();sc.master.sidechain={1,7};Project back;std::string err;
      require(decodeProject(back,encodeProject(sc),err)&&back.master.sidechain[0]==1&&back.master.sidechain[1]==7,"compressor sidechain survives save/load");}
-    {Editor off;off.project=blankProject();off.project.tracks[0].steps[0].note=60;off.column=4;off.row=0;off.action(Action::Enter);
+    {Editor off;off.project=blankProject();off.project.tracks[0].steps[0].note=60;off.column=4;off.row=0;off.action(Action::Enter);off.action(Action::Right);
      auto serial=off.auditionSerial;off.action(Action::Up);off.action(Action::Up);off.action(Action::Up);
      require(off.auditionSerial==serial+3&&off.previewStep().note==63,"dialling OFFSET auditions the note it produces");
-     Editor ctx;ctx.project=blankProject();ctx.project.tracks[0].steps[1].note=50;ctx.column=4;ctx.row=3;ctx.action(Action::Enter);ctx.action(Action::Down);
+     Editor ctx;ctx.project=blankProject();ctx.project.tracks[0].steps[1].note=50;ctx.column=4;ctx.row=3;ctx.action(Action::Enter);ctx.action(Action::Right);ctx.action(Action::Down);
      require(ctx.previewStep().note==49,"OFFSET on a row without a note acts on the nearest earlier note");}
     require(std::string(instrumentName(FmDrumEngine))=="FM DRUM"&&!nativeEngine(FmDrumEngine),"FM DRUM is a selectable, non-native engine");
     Editor fresh;fresh.entropy=12345;fresh.project=blankProject();fresh.randomizeBlankPatches();
@@ -135,8 +135,7 @@ int main() {
                 "all cycle phases");
   e.column = 0;
   e.action(Action::Enter);
-  e.action(Action::NextTrack);   // LENGTH
-  e.action(Action::NextTrack);   // CONDITION
+  e.action(Action::Right);       // the note's own CONDITION
   e.action(Action::Up);
   e.action(Action::Up);
   e.action(Action::Enter);

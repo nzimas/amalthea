@@ -238,8 +238,8 @@ void drawSystemUI(Canvas &c, const Editor &e) {
   text(162, 46, "AMALTHEA", 64, ivory);
   drawBattery(c, X(848), X(60), X(26), e.battery, e.charging, dim);
   box(40, 157, 944, 2, 0x25323a);
-  // Three appliances: TRACKER, FX, LIFEBLOOD.
-  static const char *names[] = {"TRACKER", "FX", "LIFEBLOOD"}, *lines[] = {"12-TRACK SYNTH", "USB EFFECT RACK", "EFFECT NETWORKS"};
+  // Three appliances: TRACKER, FX RACK, LIFEBLOOD.
+  static const char *names[] = {"TRACKER", "FX RACK", "LIFEBLOOD"}, *lines[] = {"12-TRACK SYNTH", "USB AUDIO EFFECTS", "EFFECT NETWORKS"};
   const uint32_t accents[] = {cyan, violet, ember};
   for (int tile = 0; tile < 3; tile++) {
     int left = 40 + tile * 324;

@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include "performance.hpp"
 #include "param_units.hpp"
 #include "walk.h"
 #include "font.hpp"
@@ -130,7 +131,7 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
     rect(64,242,896,322,0x101a20);rect(64,242,896,3,brand);
     bool save=e.exitStage==Editor::ExitStage::Save;
     bool saving=e.exitStage==Editor::ExitStage::Saving;
-    fit(108,281,808,saving?"SAVING SESSION":save?"SAVE BEFORE EXIT?":e.inLifeblood()?"EXIT LIFEBLOOD?":e.inFx()?"EXIT FX?":"EXIT TRACKER?",54,FG);
+    fit(108,281,808,saving?"SAVING SESSION":save?"SAVE BEFORE EXIT?":e.inLifeblood()?"EXIT LIFEBLOOD?":e.inFx()?"EXIT FX RACK?":"EXIT TRACKER?",54,FG);
     if(!saving)for(int choice=0;choice<2;choice++){
       bool selected=e.exitChoice==bool(choice);int x=108+choice*420;
       rect(x,409,388,108,selected?brand:0x26333b);
@@ -178,9 +179,10 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
            e.project.bpm);
   txt(410, 18, b, 28);
   drawBattery(c, X(300), X(22), X(20), e.battery, e.charging, DIM);
-  const std::string trackBadge=globalPage?(e.page==Page::Dashboard?"MENU":e.page==Page::GlobalInserts?"FX":"SYS"):bankPage?(e.page==Page::Sessions||e.page==Page::Session?"S":"P")+((e.page==Page::Sessions||e.page==Page::Session?e.activeSession:e.activePattern)<0?"--":std::to_string((e.page==Page::Sessions||e.page==Page::Session?e.activeSession:e.activePattern)+1)):e.page==Page::Mixer?std::to_string(e.mixerPage+1)+"/2":"T"+std::to_string(e.track+1);
+  const std::string trackBadge=globalPage?(e.page==Page::Dashboard?"MENU":e.page==Page::GlobalInserts?"FX":"SYS"):bankPage?(e.page==Page::Sessions||e.page==Page::Session?"S":"P")+((e.page==Page::Sessions||e.page==Page::Session?e.activeSession:e.activePattern)<0?"--":std::to_string((e.page==Page::Sessions||e.page==Page::Session?e.activeSession:e.activePattern)+1)):e.page==Page::Mixer?std::to_string(e.mixerPage+1)+"/2":e.page==Page::Performance?"LIVE":"T"+std::to_string(e.track+1);
   rect(788,6,204,104,accent);rect(780,14,220,88,accent);
-  txt(780+(220-int(trackBadge.size())*54)/2,8,trackBadge,72,BG);
+  if(e.page==Page::Performance)fit(796,22,188,trackBadge,60,BG);
+  else txt(780+(220-int(trackBadge.size())*54)/2,8,trackBadge,72,BG);
   const auto &s =
       e.editing ? e.pending : e.project.tracks[e.track].steps[e.row];
   int instrument=effectiveInstrument(e.project.tracks[e.track],s);
@@ -190,11 +192,81 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
   if(e.queuedPattern>=0&&!bankPage){size_t n=strlen(b);snprintf(b+n,sizeof b-n," > NEXT %02d",e.queuedPattern+1);}
   if(globalPage)snprintf(b,sizeof b,"%s",e.page==Page::Dashboard?"DASHBOARD":e.page==Page::GlobalInserts?"GLOBAL INSERTS":"DEVICE SETTINGS");
   if(bankPage)snprintf(b,sizeof b,"%s",e.page==Page::Sessions||e.page==Page::Session?"SESSION BANK":"PATTERN BANK");
+  // PERFORMANCE: what the last press did, else how to leave (no popup over the tiles).
+  if(e.page==Page::Performance)snprintf(b,sizeof b,"%s",e.notice.empty()?"PERFORMANCE  -  F1 LEAVES, THE PATTERN UNTOUCHED":e.notice.c_str());
   if(e.erasing&&e.page==Page::Pattern)fit(24,66,e.shift||e.shift2?610:730,"ERASE MODE - ENTER CLEARS / SHIFT+ENTER EXITS",26,0xff3b30);
   else if(e.hasSelection()&&e.page==Page::Pattern&&!e.editing)fit(24,66,e.shift||e.shift2?610:730,std::to_string(e.selectionLast()-e.selectionFirst()+1)+" ROWS SELECTED - ENTER EDITS ALL",26,0xffff00);
   else fit(24,66,e.shift||e.shift2?610:730,b,26,0xffff00);
   if(e.shift||e.shift2)fit(650,66,116,e.shift?"SHIFT":"FUNC",24,0xffff00);
   rect(24, 111, 976, 2, LINE);
+  if(e.page==Page::Performance){
+    // Four tiles, one per button. On: a border in the track colour and a yellow title;
+    // off: a quiet grey frame. Each shows what its button drew.
+    static const Performance idle{};
+    const Performance&p=e.performance?*e.performance:idle;
+    constexpr uint32_t Yellow=0xffff00,Off=0x2c2c2c,Quiet=0x8a8f8c;
+    auto tile=[&](int x,int y,const char*key,const char*name,bool on){
+      if(on){rect(x,y,484,304,accent);rect(x+5,y+5,474,294,BG);}
+      else{rect(x,y,484,304,Off);rect(x+2,y+2,480,300,0x0c0c0c);}
+      // the button: a ring with its letter; the title; ON / OFF in the corner
+      int cx=x+24,cy=y+20;rect(cx,cy,52,52,on?Yellow:0x3a3a3a);rect(cx+4,cy+4,44,44,on?BG:0x0c0c0c);
+      fit(cx+13,cy+8,28,key,36,on?Yellow:Quiet);
+      fit(x+92,y+28,286,name,32,on?Yellow:Quiet);
+      if(on){rect(x+392,y+26,70,40,accent);fit(x+402,y+32,50,"ON",28,BG);}
+      else fit(x+398,y+32,60,"OFF",26,0x4a4a4a);
+    };
+    // The tiles sit as the buttons do, counterclockwise from the top left: X, Y, B, A.
+    const int L=24,R=516,T=126,B=440;
+    // X (top left): the chain and where it plays
+    tile(L,T,"X","CHAIN",p.chainOn);
+    if(p.stages){
+      fit(L+28,T+96,428,perfComboName(p.combo),44,p.chainOn?FG:Quiet);
+      for(int i=0;i<p.stages;i++)fit(L+28+(i%2)*218,T+156+(i/2)*44,206,std::to_string(i+1)+" "+fxName(p.effect[size_t(i)].type),28,p.chainOn?FG:Quiet);
+      int x=L+28;
+      for(int k=0;k<p.targets;k++){int t=p.target[size_t(k)].track;if(t<0)continue;
+        rect(x,T+250,84,34,p.chainOn?trackColor(t):0x333333);
+        char name[8];snprintf(name,sizeof name,"T%d",t+1);txt(x+12,T+252,name,28,BG);x+=96;}
+    } else fit(L+28,T+120,428,"PRESS X: A CHAIN ON SOME TRACKS",26,Quiet);
+    // B (bottom right): the chain's parameters
+    tile(R,B,"B","PARAMETERS",p.paramsOn);
+    if(p.stages){
+      fit(R+28,B+96,428,p.paramsOn?"NEW SET":"THE CHAIN'S OWN",44,p.paramsOn?FG:Quiet);
+      for(int i=0;i<p.stages;i++){int mix=p.effect[size_t(i)].value;
+        fit(R+28,B+156+i*34,200,fxName(p.effect[size_t(i)].type),24,Quiet);
+        rect(R+236,B+164+i*34,210,10,0x222222);rect(R+236,B+164+i*34,210*mix/100,10,p.paramsOn?accent:0x555555);}
+    } else fit(R+28,B+120,428,"NEEDS A CHAIN (X)",26,Quiet);
+    // A (top right): six LFOs on the chain, each a moving marker on its parameter's line
+    tile(R,T,"A","CHAIN LFOS",p.fxLfoOn);
+    {int row=0;
+     for(const auto&l:p.lfo){if(l.stage<0||l.stage>=p.stages)continue;
+      int y=T+88+row*34;auto type=p.effect[size_t(l.stage)].type;
+      (void)type;std::string name=std::to_string(l.stage+1)+"  "+insertParameterName(p.effect[size_t(l.stage)].type,l.field,l.page,p.base[size_t(l.stage)]);
+      fit(R+28,y,236,name,22,p.fxLfoOn?FG:Quiet);
+      rect(R+276,y+8,180,4,0x2a2a2a);
+      int at=R+276+int((perfLfoValue(l)*.5f+.5f)*168);
+      rect(at,y+2,12,16,p.fxLfoOn?(l.hold?Yellow:accent):0x4a4a4a);
+      if(++row==6)break;}
+     if(!row)fit(R+28,T+120,428,p.stages?"PRESS A: SIX LFOS ON THE CHAIN":"NEEDS A CHAIN (X)",26,Quiet);}
+    // Y (bottom left): the instruments
+    tile(L,B,"Y","INSTRUMENT LFOS",p.engineLfoOn);
+    {int row=0;
+     for(const auto&l:p.engineLfo){if(l.target<0)continue;
+      int y=B+88+row*34;
+      fit(L+28,y,236,perfEngineLfoName(p,l),22,p.engineLfoOn?FG:Quiet);
+      rect(L+276,y+8,180,4,0x2a2a2a);
+      if(l.morph){   // a recipe engine: the bank of variations, the one playing lit
+        int span=std::clamp(int(std::lround(2+l.depth*(PerfVariations-2))),2,PerfVariations);
+        int index=std::clamp(int(std::lround((perfLfoValue(l)*.5f+.5f)*float(span-1))),0,span-1);
+        for(int i=0;i<span;i++)rect(L+276+i*180/span,y+2,180/span-6,16,i==index&&p.engineLfoOn?(l.hold?Yellow:accent):0x333333);
+      } else {
+        int at=L+276+int((perfLfoValue(l)*.5f+.5f)*168);
+        rect(at,y+2,12,16,p.engineLfoOn?(l.hold?Yellow:accent):0x4a4a4a);
+      }
+      if(++row==6)break;}
+     if(!row)fit(L+28,B+120,428,"PRESS Y: SIX LFOS ON INSTRUMENTS",26,Quiet);}
+    if(e.notice.empty())volumeOverlay();
+    return;
+  }
   if (e.page != Page::Pattern) {
     if(e.page==Page::Dashboard){
       txt(32,132,"DASHBOARD",42,FG);
@@ -496,6 +568,9 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
         // A varied row (FUNC + hold X): a small square after its instrument number.
         if(col==1&&step.variation&&step.instrument!=NoInstrument)
           rect(left[col]+widths[col]-24,y+rh/2-5,10,10,sel&&col==e.column?BG:accent);
+        // A RANDOM FX cell (new parameters each time it plays): a small square after the cell.
+        if((col==2||col==3)&&step.fx[col-2].random&&step.fx[col-2].type!=FxType::None)
+          rect(left[col]+widths[col]+2,y+rh/2-5,10,10,accent);
       }
     }
   }
@@ -511,13 +586,14 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
       panel.textFit(X(x),X(y),X(width),text,std::max(2,X(size)),ink);
     };
     label(32,20,e.column==2 || e.column==3?190:704,columns[e.column],32,accent);
-    int tabStart=std::min((e.eventTab/2)*2,e.eventTabCount()-2);
-    for(int visible=0;visible<2;visible++){
+    // Parameter tabs (F1 / F2), two at a time.
+    const int tabs=e.eventTabCount(),shownTabs=std::min(2,tabs),tabStart=std::max(0,std::min((e.eventTab/2)*2,tabs-2));
+    for(int visible=0;visible<shownTabs;visible++){
       int tab=tabStart+visible;
       int x=32+visible*352;bool selected=e.eventTab==tab;
       panel.rect(X(x),X(64),X(344),X(48),selected?accent:0x282828);
       bool fx=e.fxColumn();
-      label(x+16,70,312,tab==0?(e.column==4?"MOD TYPE / VALUE":fx?"DRY/WET MIX":"VALUE"):(e.column==0||fx)&&tab==1?"LENGTH":tab==(e.column==0||fx?2:1)?"CONDITION":noteParameterName(tab-3),30,selected?BG:FG);
+      label(x+16,70,312,e.column==4&&tab==1?"TARGETS":tab==0?(e.column==4?"TYPE / SEMITONES":fx?"EFFECT / MIX":"VALUE"):(e.column==0||fx)&&tab==1?"LENGTH":fx&&tab==2?"RANDOM":noteParameterName(tab-2),30,selected?BG:FG);
     }
     std::string value,description;
     if(e.lengthTab()&&e.fxColumn()){
@@ -532,27 +608,63 @@ void drawUI(Canvas &c, const Editor &e, const AudioStats &audio, bool help) {
     }
     else if(e.lockTab()>=0){
       int p=e.lockTab();auto v=e.pending.locks[p];int shown=v==Inherit?noteParameterDefault(e.project.tracks[e.track],p):v;
-      value=p==NotePan?units::pan(shown):std::to_string(shown)+"%";
-      description=v==Inherit?"TRACK DEFAULT":"STEP OVERRIDE";
+      value=v==Inherit?"TRACK":p==NotePan?units::pan(shown):std::to_string(shown)+"%";
+      description=v==Inherit?"THE TRACK'S "+(p==NotePan?units::pan(shown):std::to_string(shown)+"%")+" - UP: SET ON THIS STEP":"STEP VALUE - DOWN PAST "+std::string(p==NotePan?units::pan(0):"0%")+": TRACK";
     }
-    else if(e.conditionTab()){if(e.fxColumn())label(248,20,488,fxName(e.pending.fx[e.column-2].type),32,FG);value=conditionText(eventCondition(e.pending,e.column));description="COLUMN CYCLE / "+std::to_string(eventCondition(e.pending,e.column).occurrence)+" OF "+std::to_string(eventCondition(e.pending,e.column).every);}
+    else if(e.randomTab()){
+      auto fx=e.pending.fx[e.column-2];
+      label(248,20,488,fxName(fx.type),32,FG);
+      value=fx.random?"YES":"NO";
+      description=fx.type==FxType::None?"CHOOSE AN EFFECT FIRST":fx.random?"NEW PARAMETERS EACH TIME IT PLAYS":"THE TRACK'S PARAMETERS";
+    }
     else if(e.column==0) {value=noteName(e.pending.note);description="UP/DOWN: NOTE";}
     else if(e.column==1) {
       auto slot=effectiveInstrument(e.project.tracks[e.track],e.pending);
       value=std::to_string(slot+1)+" "+instrumentName(trackPatch(e.project,e.track,slot).engine);
       description=e.pending.instrument==NoInstrument?"TRACK DEFAULT / "+std::string(patchFamily(trackPatch(e.project,e.track,slot))):patchFamily(trackPatch(e.project,e.track,slot));
       if(e.pending.instrument!=NoInstrument&&e.pending.variation)description+=" / ROW VARIATION";
-    } else if(e.column<4) {
-      auto fx=e.pending.fx[e.column-2];
-      label(248,20,488,fxName(fx.type),32,FG);
-      value=units::wet(fx.value);
-      description=fx.value==0?"DRY - LEFT/RIGHT: TYPE":"LEFT/RIGHT: TYPE   UP/DOWN: DRY/WET";
-    } else {
-      auto m=e.pending.modifier;value=modifierText(m);
-      description=m.type==ModifierType::None?"LEFT/RIGHT: OFFSET OR TRANSPOSE":m.type==ModifierType::Offset?"OFFSET THIS ROW - LEFT/RIGHT: TYPE":"TRANSPOSE FROM HERE - LEFT/RIGHT: TYPE";
     }
-    panel.textFit(padding,X(136),contentWidth,value,X(88),FG);
-    panel.textFit(padding,X(278),contentWidth,description,X(26),DIM);
+    // The tab's value field(s), then the parameter's own CONDITION. The selected field gets a
+    // border in the track colour and yellow text on black (no inversion);
+    // LEFT / RIGHT select, UP / DOWN change it.
+    auto condition=parameterCondition(e.pending,e.column,e.eventTab);
+    auto field=[&](int x,int width,int index,const char *name,const std::string &text,int size,bool greyed=false){
+      bool selected=e.eventField==index;constexpr uint32_t Yellow=0xffff00,Greyed=0x3a3a3a;
+      if(selected){panel.rect(X(x),X(124),X(width),X(144),accent);panel.rect(X(x+5),X(129),X(width-10),X(134),BG);}
+      else panel.rect(X(x),X(124),X(width),X(144),greyed?0x121212:0x1a1a1a);
+      label(x+16,132,width-32,name,24,selected?Yellow:greyed?Greyed:DIM);
+      panel.textFit(X(x+16),X(166),X(width-32),text,X(size),selected?Yellow:greyed?Greyed:FG);
+    };
+    if(e.targetsTab()){
+      // RANDOM TARGETS: three targets, then the cell's CONDITION.
+      static const char *names[ModifierTargets]={"TARGET 1","TARGET 2","TARGET 3"};
+      const auto &m=e.pending.modifier;
+      for(int i=0;i<ModifierTargets;i++){bool greyed=e.targetGreyed(i);std::string name=randomTargetName(m.targets[i]);auto send=name.find(" SEND");if(send!=std::string::npos)name.erase(send);   // (the banner names the send in full)
+        field(32+i*176,168,i,names[i],greyed?"---":name,36,greyed);}
+      field(560,176,ModifierTargets,"CONDITION",conditionText(condition),44);
+      int chosen=0;for(int i=1;i<ModifierTargets;i++)chosen+=m.targets[i]!=TargetNone;
+      int t=m.targets[std::clamp(e.eventField,0,ModifierTargets-1)];
+      description=m.targets[0]==TargetAny?"ONE PARAMETER AT RANDOM EACH TIME":
+        e.eventField<ModifierTargets&&t==TargetNote?"A NOTE OF THE SCALE AND ROOT NOTE":
+        chosen?"EVERY TARGET REDRAWN EACH TIME":"UP/DOWN: ADD MORE TARGETS";
+    } else if(e.fieldCount()==3){
+      std::string first,second;const char *names[2];
+      if(e.column==4){auto m=e.pending.modifier;names[0]="TYPE";names[1]="SEMITONES";
+        first=m.type==ModifierType::None?"EMPTY":m.type==ModifierType::Offset?"OFFSET":m.type==ModifierType::Transpose?"TRANSPOSE":"RANDOM";
+        second=m.type==ModifierType::None||m.type==ModifierType::Random?"---":(m.semitones>0?"+":"")+std::to_string(m.semitones);
+        description=m.type==ModifierType::None?"EMPTY CELL":m.type==ModifierType::Offset?"OFFSETS THIS ROW'S NOTE":m.type==ModifierType::Transpose?"TRANSPOSES FROM HERE":"REDRAWS THIS NOTE - F2: TARGETS";}
+      else {auto fx=e.pending.fx[e.column-2];names[0]="EFFECT";names[1]="DRY/WET";
+        first=fx.type==FxType::None?"NONE":fxName(fx.type);second=units::wet(fx.value);
+        description=fx.type==FxType::None?"UP/DOWN: CHOOSE AN EFFECT":fx.value==0?"DRY":"";}
+      field(32,300,0,names[0],first,56);
+      field(344,196,1,names[1],second,56,e.fieldGreyed(1));
+      field(552,184,2,"CONDITION",conditionText(condition),52);
+    } else {
+      field(32,456,0,"VALUE",value,80);
+      field(500,236,1,"CONDITION",conditionText(condition),64);
+    }
+    if(e.conditionField())description=condition.always()?"EVERY COLUMN CYCLE":"COLUMN CYCLE "+std::to_string(condition.occurrence)+" OF EVERY "+std::to_string(condition.every);
+    panel.textFit(padding,X(284),contentWidth,description,X(26),DIM);
     c.blit(panel,(c.w-panel.w)/2,X(220));
   }
   volumeOverlay();

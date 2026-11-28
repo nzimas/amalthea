@@ -8,14 +8,14 @@ visible steps, a mixer, playback, transactional editing, seeded track randomizer
 undo/redo and explicit session saving. Six native synth engines are integrated: VAP, PERC, CHIP, FIBER, HIVE and OP4. This is an incremental implementation, not completion of
 all milestones in the foundational PDF.
 
-The FX appliance now shares the insert processors, with automatic FM1 USB capture,
+The FX RACK appliance now shares the insert processors, with automatic FM1 USB capture,
 twelve independent effect sequencers and a separate 64-slot session bank.
 In a slot sequencer, tap X for density and hold X to generate parameter-lock events;
 the moving step highlight follows playback independently of the cursor. External
 MIDI clock takes priority; session tempo is the fallback.
-With FX open, unplugging the laptop automatically enables bottom-port USB host
-mode after three seconds. Exit FX before reconnecting the laptop; no timed arming
-is needed. See [FX appliance](docs/FX-APPLIANCE.md).
+With FX RACK open, unplugging the laptop automatically enables bottom-port USB host
+mode after three seconds. Exit FX RACK before reconnecting the laptop; no timed arming
+is needed. See [FX RACK appliance](docs/FX-APPLIANCE.md).
 
 LIFEBLOOD, the third appliance, sends the FM1's USB audio through a generated network
 of the same inserts: X grows a network, Y redraws its parameters, B starts angiogenesis.
@@ -77,7 +77,7 @@ maximum normal setting (10/10), and the app restores the previous value on clean
 Development updates must also restart blank and stopped: do not save or resume the live session as part of deployment or QA.
 
 Startup is blank and stopped: all 12 tracks have no notes or step effects. The saved session is preserved until explicitly saved over. The banks offer deliberate load/save gestures for each slot.
-Instrument slots 01–11 start with VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT and CALIGULA, one engine per slot. ACD, FAT, WTFM, DIRT and SAMPLE have been removed. [Engine ports and performance](docs/ENGINE-PORTS.md) describe the original cores, adaptation and measured Brick costs. On INST, holding X redraws the TRACK SETTINGS instrument from its current engine’s families and writes that instrument on every row of the column; Shift+hold X instead assigns random instrument slots to the active rows; the track default and stored patches stay unchanged. All steps referencing that slot on the current track hear the new patch; other tracks keep their own instance. FUNC+hold X keeps the slots and patches but gives each row holding an instrument its own variation of it (sessions store them from AMAL24); the pitch-related parameters of every engine are excluded, so notes keep their pitch.
+Instrument slots 01–15 start with VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT, CALIGULA, FM DRUM, OBRADOR, RINGS and PLAITS, one engine per slot. ACD, FAT, WTFM, DIRT and SAMPLE have been removed. [Engine ports and performance](docs/ENGINE-PORTS.md) describe the original cores, adaptation and measured Brick costs. On INST, holding X redraws the TRACK SETTINGS instrument from its current engine’s families and writes that instrument on every row of the column; Shift+hold X instead assigns random instrument slots to the active rows; the track default and stored patches stay unchanged. All steps referencing that slot on the current track hear the new patch; other tracks keep their own instance. FUNC+hold X keeps the slots and patches but gives each row holding an instrument its own variation of it (sessions store them from AMAL24); the pitch-related parameters of every engine are excluded, so notes keep their pitch.
 The spreadsheet uses the full available height, without its old three footer lines:
 16 rows at 36 pixels with larger type, or eight rows at 72 pixels.
 Randomizer MODE and density are independently remembered for each track/column (and
@@ -122,7 +122,7 @@ column (slot), so rows of that column using the same effect share them; the noti
 how many other rows the new parameters reach. Enter commits, Cancel discards.
 
 The battery charge (AXP2202 fuel gauge, read every 20 s) appears in the Tracker top bar
-between TRACKER and the transport, at the top right of the FX appliance and of the home
+between TRACKER and the transport, at the top right of the FX RACK appliance and of the home
 screen; it turns red at 15% or less and shows a bolt while charging.
 The percentage selects an exact rounded number of populated active steps. Unselected
 steps become rests (NOTE), inherit the track instrument (Shift+INST), or clear the
@@ -426,6 +426,12 @@ column's cycle, or until the next TRANSPOSE (`T+0` returns to the written notes)
 add to it. Each MOD cycle starts untransposed, so a TRANSPOSE on step 1 transposes the
 whole sequence, and one conditioned 1:2 transposes every other cycle. Sessions saved
 before build 38 load their `+00` cells as empty.
+A RANDOM cell (`RND`, TYPE after TRANSPOSE) redraws NOTE column parameters of its row's
+note each time it is applied (its condition met). It adds a TARGETS tab (F2): TARGET 1 is
+ANY (the default: one of NOTE, LENGTH, PAN, VOLUME and the four sends, drawn afresh each
+time; TARGETS 2 and 3 are greyed out) or a parameter, and TARGETS 2 and 3 add up to two
+more, every one redrawn each time. A random NOTE is a note of the session scale and root
+note within an octave of the row's note.
 Project format 2 imports version 1, activates its first 16 steps and preserves notes,
 instruments, level/pan commands and archived rows. Removed probability/gate/transpose
 commands and the former third/fourth FX slots are omitted during migration. Original
@@ -519,9 +525,9 @@ to AMDV2 for the expanded insert switches. Startup remains blank and stopped.
 ## Amalthea appliance shell (0.19.0)
 
 Startup shows the Amalthea orbital-A splash and the appliance home grid. Choose
-TRACKER or FX with the cross and press the existing Enter button (315, bottom-right)
-to open it. Tracker starts blank and stopped; FX is an explicit development
-placeholder, not a working USB audio processor. Back/Home leaves the FX preview.
+TRACKER or FX RACK with the cross and press the existing Enter button (315, bottom-right)
+to open it. Tracker starts blank and stopped; FX RACK is an explicit development
+placeholder, not a working USB audio processor. Back/Home leaves the FX RACK preview.
 The existing tracker dashboard and Home shortcuts remain local to Tracker.
 
 To leave Tracker, hold FUNC (right shoulder) first, then press and hold Shift (left
@@ -542,6 +548,6 @@ pattern scale/root, and randomized volume stays within10–100%. FX value
 randomization preserves the selected insert type. Outside event editing, existing
 X density/column gestures are unchanged.
 
-Brand artwork is under `assets/identity`: SVG system/Tracker/FX marks and the boot
+Brand artwork is under `assets/identity`: SVG system/Tracker/FX RACK marks and the boot
 PNG. The same native renderer draws the splash and home UI; `render_identity`
 recreates the preview PPMs for conversion to PNG without additional runtime libraries.

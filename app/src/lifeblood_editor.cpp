@@ -56,13 +56,13 @@ void Editor::lifebloodAction(Action a){
  if(a==Action::Session){page=Page::LifebloodSessions;return;}
  if(a==Action::Mixer)return;
  // Shift+A, from any page: session settings.
- if(a==Action::ColumnSettings&&shift&&page!=Page::LifebloodSettings){page=Page::LifebloodSettings;lbSettingsField=0;return;}
+ if(a==Action::ColumnSettings&&shift&&page!=Page::LifebloodSettings){page=Page::LifebloodSettings;lbSettingsField=lbSettingsTab=0;return;}
  if(a==Action::Play){lbBypass=!lbBypass;revision++;announce(lbBypass?"BYPASS: DRY INPUT":"NETWORK ON",1000);return;}
  if(page==Page::LifebloodSnapshots||page==Page::LifebloodSessions){
   bool snapshots=page==Page::LifebloodSnapshots;int&slot=snapshots?lbSnapshotSlot:lbSessionSlot;int count=snapshots?LifebloodSnapshots:LifebloodSessionSlots;
   if(a==Action::Left)slot=(slot+count-1)%count;if(a==Action::Right)slot=(slot+1)%count;
   if(a==Action::Up)slot=(slot+count-8)%count;if(a==Action::Down)slot=(slot+8)%count;
-  if(a==Action::Enter){page=Page::LifebloodSettings;lbSettingsField=0;}
+  if(a==Action::Enter){page=Page::LifebloodSettings;lbSettingsField=lbSettingsTab=0;}
   if(a==Action::Cancel||a==Action::ColumnSettings)page=Page::LifebloodField;
   // The main loop performs the file work and reports the result.
   if(!snapshots&&a==Action::LoadSession)lbSessionRequest=1;
@@ -86,9 +86,25 @@ void Editor::lifebloodAction(Action a){
  }
  if(page==Page::LifebloodSettings){
   if(a==Action::Cancel||a==Action::ColumnSettings||a==Action::Enter){page=Page::LifebloodField;return;}
-  if(a==Action::Up)lbSettingsField=(lbSettingsField+LifebloodSettingsFields-1)%LifebloodSettingsFields;
-  if(a==Action::Down)lbSettingsField=(lbSettingsField+1)%LifebloodSettingsFields;
+  // F1 / F2: GENERAL, COMP, EQ.
+  if(a==Action::PrevTrack||a==Action::NextTrack){lbSettingsTab=(lbSettingsTab+(a==Action::NextTrack?1:LifebloodSettingsTabs-1))%LifebloodSettingsTabs;lbSettingsField=0;return;}
+  const int fields=lifebloodSettingsFieldCount(lbSettingsTab);
+  if(a==Action::Up)lbSettingsField=(lbSettingsField+fields-1)%fields;
+  if(a==Action::Down)lbSettingsField=(lbSettingsField+1)%fields;
   int d=a==Action::Right?1:a==Action::Left?-1:0;if(!d)return;
+  if(lbSettingsTab==1){
+   auto&m=s.master;if(!stepMasterComp(m,lbSettingsField,d,shift))return;
+   notice=lbSettingsField==1?"COMP PROFILE":masterCompFieldName(lbSettingsField);
+   noticeDetail=lbSettingsField==1?compProfileName(m.compProfile):masterCompValue(m,lbSettingsField);
+   noticeMs=1000;noticeDetailSerial=++noticeSerial;revision++;return;
+  }
+  if(lbSettingsTab==2){
+   auto&m=s.master;if(!stepMasterEq(m,lbSettingsField,d,shift))return;
+   notice=lbSettingsField==0?"EQ":lbSettingsField==1?"EQ PROFILE":masterBandName(lbSettingsField-2);
+   int b=m.band[std::clamp(lbSettingsField-2,0,MasterBands-1)];
+   noticeDetail=lbSettingsField==0?(m.eqOn?"ON":"OFF"):lbSettingsField==1?eqProfileName(m.eqProfile):(b>0?"+":"")+std::to_string(b)+" DB";
+   noticeMs=1000;noticeDetailSerial=++noticeSerial;revision++;return;
+  }
   // The FM1's clock sets the tempo while it runs: the session's own value waits underneath.
   if(lbSettingsField==0&&lbClockBpm>0){notice="TEMPO";noticeDetail="FM1 CLOCK "+std::to_string(lbClockBpm)+" BPM";noticeMs=1200;noticeDetailSerial=++noticeSerial;return;}
   if(lbSettingsField==0)s.tempo=uint16_t(std::clamp(int(s.tempo)+d*(shift?10:1),30,300));

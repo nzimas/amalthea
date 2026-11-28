@@ -58,11 +58,15 @@ int main() {
   Editor e;
   e.project = original;
   auto n = e.project.tracks[0].steps[0].note;
+  // Step editor: LEFT / RIGHT select a field, UP / DOWN change it, START commits, A cancels.
   e.action(Action::Enter);
+  check(e.editing && e.eventField == 0, "editor opens on the VALUE field");
   e.action(Action::Up);
-  check(e.project.tracks[0].steps[0].note == n, "pending edits isolated");
+  check(e.project.tracks[0].steps[0].note == n && e.pending.note == n + 1, "pending edits isolated");
+  e.action(Action::Right);e.action(Action::Up);
+  check(e.pending.note == n + 1 && e.pending.condition.every == 2, "RIGHT selects the CONDITION field; UP changes it");
   e.action(Action::Cancel);
-  check(e.project.tracks[0].steps[0].note == n, "cancel preserves original");
+  check(!e.editing && e.project.tracks[0].steps[0].note == n, "cancel preserves original");
   e.action(Action::Enter);
   e.action(Action::Up);
   e.action(Action::Enter);
@@ -71,6 +75,9 @@ int main() {
   check(e.project.tracks[0].steps[0].note == n, "undo committed edit");
   e.column = 2;
   e.action(Action::Enter);
+  e.action(Action::Right);          // DRY/WET
+  e.action(Action::Up);
+  e.action(Action::Left);           // EFFECT
   e.action(Action::Up);
   e.action(Action::Right);
   e.action(Action::Up);

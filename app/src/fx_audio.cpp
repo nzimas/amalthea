@@ -4,6 +4,7 @@
 #include "audio_probe.hpp"
 #include "audio_health.hpp"
 #include "persistent_audio_log.hpp"
+#include "bigorna_master.h"
 #include <unistd.h>
 #include <csignal>
 #include <cerrno>
@@ -25,6 +26,45 @@ namespace {
 constexpr int Ring=8192,Queue=4,PrimeFrames=1536,TargetFrames=1792;
 [[maybe_unused]] constexpr long CaptureGuardFrames=96; // two full-speed packets
 double nowSeconds(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+// The USB input is read at a fractional position (the FM1's clock and the Brick's differ by
+// some ppm, and a 48 kHz FM1 is converted). Linear interpolation was a moving low-pass: half
+// way between samples -2.4 dB at 10 kHz and -11 dB at 18 kHz, swept several times a second
+// as the position drifted. A 32-tap Kaiser-windowed sinc (beta 6) stays within 0.005 dB to
+// 18 kHz at every position; 512 phases, interpolated linearly between neighbours.
+constexpr int SincTaps=32,SincHalf=SincTaps/2,SincPhases=512;
+struct SincTable {
+ std::vector<float> h;double cutoff=-1;
+ static double bessel0(double x){double sum=1,term=1;for(int k=1;k<40;k++){term*=(x/(2*k))*(x/(2*k));sum+=term;}return sum;}
+ // cutoff: the passband edge as a share of the input's Nyquist (1 for 44.1 kHz in, 44.1/48 below for 48 kHz).
+ void build(double c){
+  if(c==cutoff)return;cutoff=c;h.assign(size_t(SincPhases+1)*SincTaps,0.f);const double beta=6,norm=bessel0(beta);
+  for(int p=0;p<=SincPhases;p++){double f=double(p)/SincPhases,sum=0;float*row=&h[size_t(p)*SincTaps];
+   for(int k=0;k<SincTaps;k++){double n=k-(SincHalf-1)-f,x=n*c,sinc=std::abs(x)<1e-9?1:std::sin(M_PI*x)/(M_PI*x),w=n/SincHalf;
+    double v=c*sinc*bessel0(beta*std::sqrt(std::max(0.0,1-w*w)))/norm;row[k]=float(v);sum+=v;}
+   for(int k=0;k<SincTaps;k++)row[k]=float(row[k]/sum);   // unity at DC for every position
+  }
+ }
+ // Taps for fraction f (0..1) of the way from sample SincHalf-1 to SincHalf of the window.
+ void taps(double f,float*out)const{double x=f*SincPhases;int p=std::min(SincPhases-1,int(x));float m=float(x-p);const float*a=&h[size_t(p)*SincTaps],*b=a+SincTaps;
+  for(int k=0;k<SincTaps;k++)out[k]=a[k]+m*(b[k]-a[k]);}
+};
+// The output limiter: 1.5 ms of look-ahead, so the gain glides down before a peak instead of
+// jumping on it; 150 ms release. Engaged only on peaks above -0.2 dBFS.
+struct OutputLimiter {
+ static constexpr int Ahead=64;static constexpr float Threshold=.977f;
+ // need: what each of the last Ahead+1 samples asks for, the one leaving the delay included.
+ std::array<float,Ahead*2> delay{};std::array<float,Ahead+1> need{};int at=0,j=0;float gain=1;
+ OutputLimiter(){need.fill(1);}
+ void reset(){delay.fill(0);need.fill(1);at=j=0;gain=1;}
+ void process(float&l,float&r){
+  float peak=std::max(std::abs(l),std::abs(r));need[j]=peak>Threshold?Threshold/peak:1.f;j=(j+1)%(Ahead+1);
+  float target=1;for(float v:need)target=std::min(target,v);
+  // Down: within the look-ahead (the gain reaches what the peak needs as it leaves the delay). Up: slowly.
+  if(target<gain)gain+=(target-gain)*(1.f/12);else gain+=(target-gain)*(1.f/6615);
+  float dl=delay[at*2],dr=delay[at*2+1];delay[at*2]=l;delay[at*2+1]=r;at=(at+1)%Ahead;
+  l=std::clamp(dl*gain,-Threshold,Threshold);r=std::clamp(dr*gain,-Threshold,Threshold);
+ }
+};
 struct SlotDSP {
  InsertEffect effect;std::unique_ptr<PortedProcessor> port;InsertSettings last{};Effect lastEffect{};int lastBpm=-1;bool configured=false;
  void apply(Effect e,const InsertSettings&s,int bpm){if(!configured||e.type!=lastEffect.type||e.value!=lastEffect.value||bpm!=lastBpm||memcmp(&s,&last,sizeof s)){effect.configure(e,bpm);effect.setSettings(s);last=s;lastEffect=e;lastBpm=bpm;configured=true;}}
@@ -35,11 +75,11 @@ struct FxAudio::Impl {
  std::unique_ptr<AudioProbe> probe;
  AudioStats&stats;std::atomic<bool> enabled{false},alive{true};std::thread usb;
  std::array<std::array<float,12>,Ring> ring{};std::atomic<uint64_t> written{0},consumed{0};
- std::atomic<bool> resetRequested{false};float limiter=1;
+ std::atomic<bool> resetRequested{false};OutputLimiter limiter;SincTable sinc;uint64_t validFrom=0;   // (taps before it, from before a reset, read silence)
  std::atomic<int> inputRate{44100},inputChannels{6};double read=0,drift=0;bool primed=false;float inputGain=0;std::array<float,12> lastInput{};
  struct Message {FxRack rack;DeviceSettings device;std::array<SlotDSP*,12> dsp{};
   // LIFEBLOOD messages carry a network instead of a rack.
-  bool network=false;LifebloodNetwork net;int netTempo=120,netMix=100;bool netBypass=false;uint32_t netEpoch=0;std::array<SlotDSP*,LifebloodMaxNodes> netDsp{};};
+  bool network=false;LifebloodNetwork net;LifebloodMaster master;int netTempo=120,netMix=100;bool netBypass=false;uint32_t netEpoch=0;std::array<SlotDSP*,LifebloodMaxNodes> netDsp{};};
  std::array<Message,Queue> messages{};std::atomic<uint64_t> head{0},tail{0},completed{0};
  std::array<std::unique_ptr<SlotDSP>,12> owners{};std::array<FxType,12> ownerTypes{};
  // A retired processor is freed once the audio has taken a later message and, for a
@@ -57,25 +97,58 @@ struct FxAudio::Impl {
   void sort(){count=0;for(int v=0;v<LifebloodVertices;v++)if(!lifebloodInput(v)&&net.live(v))order[count++]=v;
    std::sort(order.begin(),order.begin()+count,[&](int a,int b){return net.rank(a)<net.rank(b);});}
  };
- Graph graph,fadingGraph;bool networkMode=false,crossfading=false;float crossfade=1,netWet=1;int netTempo=120,netMix=100;bool netBypass=false;
+ Graph graph,fadingGraph;bool networkMode=false,crossfading=false;float crossfade=1,netWet=.5f;int netTempo=120,netMix=50;bool netBypass=false;
  std::atomic<uint32_t> settledEpoch{0};
  // Re-entering the appliance: the first new network starts clean instead of
  // crossfading from processors that were frozen while the appliance was closed.
  std::atomic<bool> freshStart{false};bool skipFade=false;
  float netBuffers[2][LifebloodVertices][128]{};
+ LifebloodMasterDsp mastering;   // LIFEBLOOD: EQ into compressor, after everything else
  LevelMatch netLevel;   // LIFEBLOOD: the network's output keeps the input's loudness
  float trackIn[LifebloodTracks][512]{};                 // this block's FM1 track lanes, stereo
- std::array<float,LifebloodTracks> panNow{{.5f,.5f,.5f,.5f,.5f,.5f}};   // each track's stereo position now (0 left .. 1 right)
+ std::array<float,LifebloodTracks> panNow{{.5f,.5f,.5f,.5f,.5f,.5f}};
+ // LIFEBLOOD's mirrored output stage (BIGORNA build 122): the FM1's stems carry no DELAY, REVERB
+ // or CHORUS, so its own effects, compressor and ceiling (bigorna_master, its fx.c) run after the
+ // network from the state it broadcasts (MidiFxMirror). Each message is stamped with the input
+ // position it arrived at and applied when the audio read reaches it, so a change lands with the
+ // audio it belongs to, not the input buffer's ~40 ms early.
+ struct MirrorEvent{uint64_t at=0;Fm1FxMessage msg;};
+ std::array<MirrorEvent,64> mirrorQ{};std::atomic<uint64_t> mirrorW{0},mirrorR{0};MidiFxMirror fxMirror;   // (the capture thread writes)
+ bool mirrorOn=false;int64_t mirrorAge=int64_t(1)<<40;   // frames since the last effects message
+ std::array<float,18> sendNow{},sendTarget{};          // each track's chorus, delay, reverb send (0..1)
+ std::array<int32_t,3> duckNow{{65536,65536,65536}},duckTarget{{65536,65536,65536}};
+ std::array<uint64_t,512> readAt{};                     // the input position behind each output frame
+ float sendGain[LifebloodTracks][3][512]{};             // this block's sends, each frame
+ float netW[8][LifebloodTracks][3]{};                   // .. each 64-frame chunk's, for the network
+ float sendNew[3*512]{},sendOld[3*512]{};               // the network's sends at OUT, each graph
+ float trackMono[LifebloodTracks][512]{};               // each track's stem, mono, at unity
+ // Take the messages the read has reached (at a 32-frame chunk's start). Returns true when the
+ // effects' parameters changed.
+ bool mirrorDrain(uint64_t pos){
+  bool fx=false;
+  while(true){auto r=mirrorR.load(std::memory_order_relaxed),w=mirrorW.load(std::memory_order_acquire);if(r==w)break;
+   auto&e=mirrorQ[r%mirrorQ.size()];if(e.at>pos)break;const auto&m=e.msg;
+   if(m.kind==1){if(!mirrorOn){bgm_reset();mirrorOn=true;}const uint8_t*f=m.fx.data();bgm_set(f,f+7,f+15,f+22,m.bpm10);mirrorAge=0;fx=true;}
+   else if(m.kind==2)for(int k=0;k<18;k++)sendTarget[k]=m.sends[k]/32768.f;
+   else if(m.kind==3)duckTarget=m.duck;
+   mirrorR.store(r+1,std::memory_order_release);
+  }
+  return fx;
+ }   // each track's stereo position now (0 left .. 1 right)
  std::array<int64_t,LifebloodTracks> silentFor{{int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40,int64_t(1)<<40}};
  // Render one graph over n <= 64 frames from in (interleaved stereo) into out.
  // in: the stereo IN for this chunk; tracks: each FM1 track's stereo lane, offset `at`.
- void renderGraph(Graph&g,const float*in,const float (*tracks)[512],int at,float*out,int n,int bpm,bool ramp){
+ // send (mirrored output stage, else null): the chorus, delay, reverb sends at OUT, send[k*512+at+f].
+ // Each vertex sends as the blend of what feeds it (by its vessels' gains); a track as the FM1 sets it.
+ void renderGraph(Graph&g,const float*in,const float (*tracks)[512],int at,float*out,int n,int bpm,bool ramp,float*send=nullptr){
   auto&buf=netBuffers[&g==&graph?0:1];std::copy(in,in+n*2,buf[LifebloodIn]);
   for(int t=0;t<LifebloodTracks;t++)std::copy(tracks[t]+at*2,tracks[t]+at*2+n*2,buf[LifebloodTrackBase+t]);
   constexpr float EdgeStep=1.f/5292,DipDown=1.f/1102,DipUp=1.f/5292;   // 120 ms vessels, 25 ms dip, 120 ms return
+  float vw[LifebloodVertices][3]{};float trackPart[3][64]{},nodePart[3][64]{};
+  if(send)for(int t=0;t<LifebloodTracks;t++)for(int k=0;k<3;k++)vw[LifebloodTrackBase+t][k]=netW[at/64][t][k];
   for(int i=0;i<g.count;i++){
    int v=g.order[i];float*dst=buf[v];std::fill(dst,dst+n*2,0.f);
-   float sum0=0,sum1=0;
+   float sum0=0,sum1=0,gsum=0,gw[3]{};
    // OUT: separate FM1 tracks passing straight through are independent parts of the
    // mix: they keep their level and stay out of the normalisation below.
    for(int u=0;u<LifebloodVertices;u++){
@@ -83,13 +156,20 @@ struct FxAudio::Impl {
     float start=cur,end=cur;if(cur<target)end=std::min(target,cur+EdgeStep*n);else if(cur>target)end=std::max(target,cur-EdgeStep*n);cur=end;
     if(start<=0&&end<=0)continue;if(!(v==LifebloodOut&&u>=LifebloodTrackBase)){sum0+=start;sum1+=end;}const float*src=buf[u];
     for(int f=0;f<n;f++){float gn=start+(end-start)*(f+1)/n;dst[f*2]+=src[f*2]*gn;dst[f*2+1]+=src[f*2+1]*gn;}
+    if(send){
+     gsum+=end;for(int k=0;k<3;k++)gw[k]+=end*vw[u][k];
+     if(v==LifebloodOut){bool track=u>=LifebloodTrackBase;const float*mono=track?trackMono[u-LifebloodTrackBase]+at:nullptr;
+      for(int k=0;k<3;k++){float w=vw[u][k];if(w<=0)continue;auto&part=track?trackPart[k]:nodePart[k];
+       for(int f=0;f<n;f++){float gn=start+(end-start)*(f+1)/n,x=track?mono[f]:(src[f*2]+src[f*2+1])*.70710678f;part[f]+=gn*w*x;}}}
+    }
    }
+   if(send&&v!=LifebloodOut&&gsum>0)for(int k=0;k<3;k++)vw[v][k]=gw[k]/gsum;
    // Several vessels into a node are averaged, never summed louder than one. Into OUT
    // they are summed louder (by the square root), so every vessel stays clearly heard;
    // the output limiter catches the rest.
    float n0=v==LifebloodOut?1/std::sqrt(std::max(1.f,sum0)):1/std::max(1.f,sum0),n1=v==LifebloodOut?1/std::sqrt(std::max(1.f,sum1)):1/std::max(1.f,sum1);
    for(int f=0;f<n;f++){float k=n0+(n1-n0)*(f+1)/n;dst[f*2]*=k;dst[f*2+1]*=k;}
-   if(v==LifebloodOut)continue;
+   if(v==LifebloodOut){if(send)for(int k=0;k<3;k++)for(int f=0;f<n;f++)send[k*512+at+f]=trackPart[k][f]+nodePart[k][f]*(n0+(n1-n0)*(f+1)/n);continue;}
    int k=v-2;auto*dsp=g.dsp[k];if(!dsp){std::fill(dst,dst+n*2,0.f);continue;}
    auto&node=g.net.node[k];
    bool differs=node.effect.type!=dsp->lastEffect.type||node.effect.value!=dsp->lastEffect.value||memcmp(&node.settings,&dsp->last,sizeof node.settings);
@@ -105,7 +185,7 @@ struct FxAudio::Impl {
   std::copy(buf[LifebloodOut],buf[LifebloodOut]+n*2,out);
  }
  void adoptNetwork(const Message&m){
-  netTempo=m.netTempo;netMix=m.netMix;netBypass=m.netBypass;
+  netTempo=m.netTempo;netMix=m.netMix;netBypass=m.netBypass;mastering.set(m.master);
   if(m.netEpoch!=graph.epoch){
    // A new network: the current one fades out on its own processors.
    fadingGraph=graph;crossfading=fadingGraph.epoch!=0&&!skipFade;skipFade=false;if(!crossfading)fadingGraph=Graph{};crossfade=crossfading?0:1;
@@ -121,10 +201,10 @@ struct FxAudio::Impl {
  void renderNetwork(float (*lanes)[512],int count,float*out,int frames,int bpm){
   bool stereo=stats.usbState.load()==4;
   float in[512],peakIn=0;bool tracksIn=!stereo&&count>1;
-  // Separate FM1 tracks: each at the FX strips' default 80%, placed where the FM1 pans it.
+  // Separate FM1 tracks: each at unity and placed where the FM1 pans it, with the FM1's own
+  // mixer law (cos / sin, 0.707 at the centre), so the dry sum is the FM1's own mix bus.
   // The FM1's stems are taken before its pan; it reports each track's pan as CC 10
-  // (MidiTrackPan), and a track whose pan has not been heard stays centred. The same
-  // constant-power law as the FM1's, gliding over 50 ms. They feed the track inputs;
+  // (MidiTrackPan), and a track whose pan has not been heard stays centred; pans glide over 50 ms. They feed the track inputs;
   // their sum is the stereo IN.
   std::fill(&trackIn[0][0],&trackIn[0][0]+LifebloodTracks*512,0.f);
   std::array<float,LifebloodTracks> pl0{},pr0{},pl1{},pr1{};
@@ -137,10 +217,29 @@ struct FxAudio::Impl {
    float l=0,r=0,k=float(i+1)/frames;
    if(!tracksIn){l=lanes[0][i*2];r=lanes[0][i*2+1];}
    else for(int c=0;c<count&&c<LifebloodTracks;c++){
-    float x=lanes[c][i*2]*.8f*1.41421356f,tl=x*(pl0[c]+(pl1[c]-pl0[c])*k),tr=x*(pr0[c]+(pr1[c]-pr0[c])*k);
+    float x=lanes[c][i*2],tl=x*(pl0[c]+(pl1[c]-pl0[c])*k),tr=x*(pr0[c]+(pr1[c]-pr0[c])*k);
     trackIn[c][i*2]=tl;trackIn[c][i*2+1]=tr;l+=tl;r+=tr;
    }
    in[i*2]=l;in[i*2+1]=r;peakIn=std::max(peakIn,std::max(std::abs(l),std::abs(r)));
+  }
+  // The mirrored output stage: messages reached by the read, each 32-frame chunk; the sends glide
+  // over a chunk (as the FM1's over its block), the returns' ducking over a few.
+  std::array<std::array<int32_t,3>,16> duckChunk{};int chunks=(frames+BigornaMasterBlock-1)/BigornaMasterBlock;
+  if(!tracksIn)mirrorOn=false;
+  for(int c=0;c<chunks;c++){
+   int i0=c*BigornaMasterBlock,i1=std::min(frames,i0+BigornaMasterBlock);mirrorDrain(readAt[i0]);
+   for(int t=0;t<LifebloodTracks;t++)for(int k=0;k<3;k++){float a=sendNow[t*3+k],b=sendTarget[t*3+k];
+    for(int i=i0;i<i1;i++)sendGain[t][k][i]=a+(b-a)*float(i-i0+1)/float(i1-i0);sendNow[t*3+k]=b;}
+   for(int k=0;k<3;k++){duckNow[k]+=(duckTarget[k]-duckNow[k])/3;if(std::abs(duckTarget[k]-duckNow[k])<4)duckNow[k]=duckTarget[k];}
+   duckChunk[c]=duckNow;
+  }
+  mirrorAge+=frames;if(mirrorAge>int64_t(44100)*3)mirrorOn=false;   // (BIGORNA refreshes every second)
+  bool mirror=mirrorOn&&tracksIn;
+  stats.lifebloodMirror.store(mirror,std::memory_order_relaxed);
+  if(mirror){
+   for(int c=0;c<count&&c<LifebloodTracks;c++)for(int i=0;i<frames;i++)trackMono[c][i]=lanes[c][i*2];
+   for(int c=count;c<LifebloodTracks;c++)std::fill(trackMono[c],trackMono[c]+frames,0.f);
+   for(int j=0;j*64<frames;j++){int mid=std::min(frames-1,j*64+32);for(int t=0;t<LifebloodTracks;t++)for(int k=0;k<3;k++)netW[j][t][k]=sendGain[t][k][mid];}
   }
   // Which tracks are sounding: any sample above -70 dBFS within the last 30 seconds.
   uint8_t heard=0;
@@ -156,25 +255,40 @@ struct FxAudio::Impl {
   std::array<float,LifebloodVertices> peaks{};float wetNew[512],wetOld[512];
   // During a crossfade the outgoing network renders on a worker at the same time.
   bool parallel=crossfading;
-  if(parallel){jobNetwork=true;jobNetIn=in;jobNetOut=wetOld;jobFrames=frames;jobBpm=bpm;
+  if(parallel){jobNetwork=true;jobNetIn=in;jobNetOut=wetOld;jobSend=mirror?sendOld:nullptr;jobFrames=frames;jobBpm=bpm;
    {std::lock_guard<std::mutex>lock(jobMutex);remaining=2;generation++;}jobReady.notify_all();}
   for(int at=0;at<frames;at+=64){int n=std::min(64,frames-at);
-   renderGraph(graph,in+at*2,trackIn,at,wetNew+at*2,n,bpm,true);
+   renderGraph(graph,in+at*2,trackIn,at,wetNew+at*2,n,bpm,true,mirror?sendNew:nullptr);
    for(int v=0;v<LifebloodVertices;v++){if(v==LifebloodIn)continue;float p=0;for(int f=0;f<n*2;f++)p=std::max(p,std::abs(netBuffers[0][v][f]));peaks[v]=std::max(peaks[v],p);}
   }
   if(parallel){std::unique_lock<std::mutex>lock(jobMutex);jobDone.wait(lock,[&]{return remaining==0;});jobNetwork=false;}
   // The new network crossfades in over the old; the whole network then keeps the input's
   // loudness (on top of each node's own match), and MIX / bypass blend it with the dry input.
-  float wet[512];
+  float wet[512],wetSend[3][512];
   for(int i=0;i<frames;i++){
    float gNew=1,gOld=0;if(parallel){crossfade=std::min(1.f,crossfade+FadeStep);gNew=std::sin(crossfade*1.5707963f);gOld=std::cos(crossfade*1.5707963f);}
    for(int c=0;c<2;c++)wet[i*2+c]=wetNew[i*2+c]*gNew+(parallel?wetOld[i*2+c]*gOld:0);
+   if(mirror)for(int k=0;k<3;k++)wetSend[k][i]=sendNew[k*512+i]*gNew+(parallel?sendOld[k*512+i]*gOld:0);
   }
-  netLevel.apply(in,wet,frames);
+  float level0=netLevel.gain;netLevel.apply(in,wet,frames);float level1=netLevel.gain;
+  float sendBus[3][512];
   for(int i=0;i<frames;i++){
    float target=netBypass?0.f:netMix*.01f;netWet=target>netWet?std::min(target,netWet+WetStep):std::max(target,netWet-WetStep);
    for(int c=0;c<2;c++){float dry=in[i*2+c];out[i*2+c]=dry+netWet*(wet[i*2+c]-dry);}
+   // The sends blend as the audio does: bypassed, exactly the FM1's (each stem by its sends).
+   if(mirror)for(int k=0;k<3;k++){float dry=0;for(int t=0;t<count&&t<LifebloodTracks;t++)dry+=sendGain[t][k][i]*trackMono[t][i];
+    float w=wetSend[k][i]*(level0+(level1-level0)*float(i+1)/frames);sendBus[k][i]=dry+netWet*(w-dry);}
   }
+  // The output stage: BIGORNA's returns, compressor and ceiling on the mix, in its fixed point.
+  if(mirror)for(int c=0;c<chunks;c++){
+   int i0=c*BigornaMasterBlock;int32_t l[BigornaMasterBlock]{},r[BigornaMasterBlock]{},sc[3][BigornaMasterBlock]{};
+   auto q15=[](float x){return int32_t(std::lrint(std::clamp(x,-16.f,16.f)*32768.f));};
+   for(int i=0;i<BigornaMasterBlock&&i0+i<frames;i++){l[i]=q15(out[(i0+i)*2]);r[i]=q15(out[(i0+i)*2+1]);for(int k=0;k<3;k++)sc[k][i]=q15(sendBus[k][i0+i]);}
+   bgm_block(l,r,sc[0],sc[1],sc[2],duckChunk[c].data());
+   for(int i=0;i<BigornaMasterBlock&&i0+i<frames;i++){out[(i0+i)*2]=l[i]/32768.f;out[(i0+i)*2+1]=r[i]/32768.f;}
+  }
+  // Mastering: EQ into the compressor, on the whole output (bypass compares the network, not the master).
+  mastering.process(out,frames);stats.lifebloodReduction.store(mastering.reduction(),std::memory_order_relaxed);
   if(crossfading&&crossfade>=1){crossfading=false;fadingGraph=Graph{};settledEpoch.store(graph.epoch,std::memory_order_release);}
   peaks[LifebloodIn]=peakIn;float po=0;for(int i=0;i<frames*2;i++)po=std::max(po,std::abs(out[i]));peaks[LifebloodOut]=po;
   for(int v=0;v<LifebloodVertices;v++)stats.lifebloodLevels[v]=std::max(peaks[v],stats.lifebloodLevels[v].load()*.94f);
@@ -185,7 +299,7 @@ struct FxAudio::Impl {
  std::atomic<uint64_t> clockTicks{0},clockEpoch{0};uint64_t lastTicks=0,lastEpoch=0;MidiClock clock{};MidiTrackPan trackPan{};int panFirmware=-1;
  std::array<std::thread,2> workers;std::mutex jobMutex;std::condition_variable jobReady,jobDone;
  uint64_t generation=0;int remaining=0;bool workersExit=false;
- bool jobNetwork=false;const float*jobNetIn=nullptr;float*jobNetOut=nullptr;   // LIFEBLOOD crossfade job
+ bool jobNetwork=false;const float*jobNetIn=nullptr;float*jobNetOut=nullptr;float*jobSend=nullptr;   // LIFEBLOOD crossfade job
  float (*jobAudio)[512]=nullptr;int jobFrames=0;double jobPulses=0;bool jobRunning=false,jobExternal=false;int jobBpm=120;
  void channel(int c){
   // Each channel is rendered by exactly one thread, so wetMix[c] needs no synchronisation.
@@ -232,7 +346,7 @@ struct FxAudio::Impl {
   std::unique_lock<std::mutex>lock(jobMutex);uint64_t seen=0;
   while(true){jobReady.wait(lock,[&]{return generation!=seen||workersExit;});if(workersExit)return;seen=generation;
    lock.unlock();
-   if(jobNetwork){if(group==0)for(int at=0;at<jobFrames;at+=64){int n=std::min(64,jobFrames-at);renderGraph(fadingGraph,jobNetIn+at*2,trackIn,at,jobNetOut+at*2,n,jobBpm,true);}}
+   if(jobNetwork){if(group==0)for(int at=0;at<jobFrames;at+=64){int n=std::min(64,jobFrames-at);renderGraph(fadingGraph,jobNetIn+at*2,trackIn,at,jobNetOut+at*2,n,jobBpm,true,jobSend);}}
    else {channel(group*2+2);channel(group*2+3);}
    lock.lock();if(--remaining==0)jobDone.notify_one();}
  });}
@@ -245,13 +359,14 @@ struct FxAudio::Impl {
  void push(const float*in,int frames,int channels,int rate){
   inputRate=rate;inputChannels=channels;auto w=written.load(std::memory_order_relaxed),r=consumed.load(std::memory_order_acquire);
   for(int i=0;i<frames;i++){
-   if(w-r>=Ring-2){stats.usbOverruns++;break;}
+   if(w-r>=Ring-SincTaps*2){stats.usbOverruns++;break;}   // (the reader's taps reach back behind `consumed`)
    auto&frame=ring[w%Ring];for(int c=0;c<12;c++)frame[c]=c<channels*2?in[i*channels*2+c]:0;w++;
   }
   written.store(w,std::memory_order_release);
  }
  void byte(uint8_t b,double when){clock.byte(b,when);if(clock.reset){clockEpoch++;clock.reset=false;}clockTicks=clock.ticks;stats.usbBpm=float(clock.tempo);stats.usbClock=clock.locked&&clock.tempo>0;stats.usbRunning=clock.running;
-  if(trackPan.byte(b))for(int t=0;t<LifebloodTracks;t++)stats.usbPan[t].store(trackPan.pan[t],std::memory_order_relaxed);}
+  if(trackPan.byte(b))for(int t=0;t<LifebloodTracks;t++)stats.usbPan[t].store(trackPan.pan[t],std::memory_order_relaxed);
+  if(fxMirror.byte(b)){auto w=mirrorW.load(std::memory_order_relaxed);if(w-mirrorR.load(std::memory_order_acquire)<mirrorQ.size()){mirrorQ[w%mirrorQ.size()]={written.load(std::memory_order_relaxed),fxMirror.msg};mirrorW.store(w+1,std::memory_order_release);}}}
  void host(){
 #ifdef AMALTHEA_USB_HOST
   PersistentAudioLog durable("/mnt/UDISK/tracker-linux/logs/audio");
@@ -381,8 +496,8 @@ struct FxAudio::Impl {
   }
  }
  void render(float*out,int frames){
-  if(freshStart.exchange(false))skipFade=true;
-  configure();if(resetRequested.exchange(false)){read=written.load();consumed.store(uint64_t(read));primed=false;inputGain=0;lastInput.fill(0);drift=0;}int count=std::clamp(inputChannels.load(),1,6);auto available=written.load(std::memory_order_acquire);
+  if(freshStart.exchange(false)){skipFade=true;mastering.reset();}
+  configure();if(resetRequested.exchange(false)){read=written.load();consumed.store(uint64_t(read));validFrom=uint64_t(read);primed=false;inputGain=0;lastInput.fill(0);drift=0;limiter.reset();}int count=std::clamp(inputChannels.load(),1,6);auto available=written.load(std::memory_order_acquire);
   if(!primed&&available-consumed.load()>=PrimeFrames){read=consumed.load();primed=true;}
   auto epoch=clockEpoch.load();if(epoch!=lastEpoch){lastEpoch=epoch;nativeTransportRestart();lastTicks=clockTicks.load();current.fill(-1);phase.fill(0);for(int k=0;k<12;k++)amalthea_walk_start(&walks[k],rack.seed+k);}
   auto ticks=clockTicks.load();uint64_t delta=ticks>=lastTicks?ticks-lastTicks:0;lastTicks=ticks;
@@ -392,11 +507,17 @@ struct FxAudio::Impl {
   if(primed)drift+=(std::clamp((fill-TargetFrames)*.000002,-.002,.002)-drift)*.005;
   double ratio=double(inputRate.load())/44100*(1+drift);
   float lanes[6][512]{};std::fill(out,out+frames*2,0);
+  int rate=inputRate.load();sinc.build(rate>44100?44100.0/rate*.96:1.0);
   for(int i=0;i<frames;i++){
-   if(primed&&uint64_t(read)+1<available){auto index=uint64_t(read);float mix=read-index;
+   readAt[i]=uint64_t(read);
+   if(primed&&uint64_t(read)+SincHalf<available){auto index=uint64_t(read);float h[SincTaps];sinc.taps(read-double(index),h);
     inputGain=std::min(1.f,inputGain+1.f/128);
+    uint64_t first=index-(SincHalf-1);bool clean=index>=validFrom+(SincHalf-1);
     for(int c=0;c<count;c++)for(int ch=0;ch<2;ch++){
-     int k=c*2+ch;lastInput[k]=ring[index%Ring][k]+mix*(ring[(index+1)%Ring][k]-ring[index%Ring][k]);lanes[c][i*2+ch]=lastInput[k]*inputGain;
+     int k=c*2+ch;float v=0;
+     if(clean)for(int t=0;t<SincTaps;t++)v+=h[t]*ring[(first+t)%Ring][k];
+     else for(int t=0;t<SincTaps;t++){int64_t at=int64_t(index)-(SincHalf-1)+t;if(at>=int64_t(validFrom))v+=h[t]*ring[uint64_t(at)%Ring][k];}
+     lastInput[k]=v;lanes[c][i*2+ch]=v*inputGain;
     }read+=ratio;
    }else {
     if(primed){primed=false;read=available;stats.usbUnderruns++;}
@@ -406,6 +527,8 @@ struct FxAudio::Impl {
   }
   if(networkMode){renderNetwork(lanes,count,out,frames,external?int(bpm):netTempo);}
   else {
+  mirrorDrain(readAt[frames-1]);mirrorOn=false;   // (FX: the queue kept moving; the stage is LIFEBLOOD's)
+  stats.lifebloodMirror.store(false,std::memory_order_relaxed);
   jobAudio=lanes;jobFrames=frames;jobPulses=pulses;jobRunning=running;jobExternal=external;jobBpm=int(bpm);
   int heavy=0,clouds=0,spaces=0;for(auto&s:rack.slots){if(s.effect.type>=FxType::Clouds)heavy++;if(s.effect.type==FxType::Clouds)clouds++;if(s.effect.type==FxType::Space)spaces++;}
   for(int k=0;k<12;k++)if(dsp[k]){dsp[k]->effect.setGrainLimit(std::clamp(128/std::max(1,clouds),4,32));dsp[k]->effect.setSpaceLineLimit(std::clamp(36/std::max(1,spaces),2,12));}
@@ -420,9 +543,7 @@ struct FxAudio::Impl {
   consumed.store(uint64_t(read),std::memory_order_release);
   for(int i=0;i<frames;i++){
     float l=out[i*2],r=out[i*2+1];if(!std::isfinite(l))l=0;if(!std::isfinite(r))r=0;
-    float peak=std::max(std::abs(l),std::abs(r)),target=peak>.96f?.96f/peak:1;
-    limiter=target<limiter?target:std::min(target,limiter+.0002f);
-    out[i*2]=l*limiter;out[i*2+1]=r*limiter;
+    limiter.process(l,r);out[i*2]=l;out[i*2+1]=r;
   }
   if(probe)probe->output(out,frames);
  }
@@ -438,7 +559,7 @@ bool FxAudio::submit(const FxRack&r,const DeviceSettings&device){auto&p=*impl;au
   if(reset||!p.owners[k]||p.ownerTypes[k]!=type){if(p.owners[k])p.retired.push_back({h,std::move(p.owners[k])});p.owners[k]=std::make_unique<SlotDSP>(type);p.ownerTypes[k]=type;p.owners[k]->apply(r.slots[k].effect,r.slots[k].settings,r.tempo);float silence[64]{};p.owners[k]->effect.processBlock(silence,32);}m.dsp[k]=p.owners[k].get();}
  m.network=false;m.rack=r;m.device=device;p.head.store(h+1,std::memory_order_release);return true;
 }
-bool FxAudio::submit(const LifebloodNetwork&n,int tempo,int mix,bool bypass,const DeviceSettings&device){
+bool FxAudio::submit(const LifebloodNetwork&n,int tempo,int mix,bool bypass,const DeviceSettings&device,const LifebloodMaster&master){
  auto&p=*impl;auto h=p.head.load(),t=p.tail.load(std::memory_order_acquire);if(h-t>=Queue)return false;
  auto done=p.completed.load(std::memory_order_acquire);auto settled=p.settledEpoch.load(std::memory_order_acquire);
  p.retired.erase(std::remove_if(p.retired.begin(),p.retired.end(),[&](const auto&v){return done>v.after&&settled>=v.epoch;}),p.retired.end());
@@ -453,7 +574,7 @@ bool FxAudio::submit(const LifebloodNetwork&n,int tempo,int mix,bool bypass,cons
   if(!owner){owner=std::make_unique<SlotDSP>(type);p.netOwnerTypes[k]=type;owner->apply(n.node[k].effect,n.node[k].settings,tempo);float silence[64]{};owner->effect.processBlock(silence,32);}
   m.netDsp[k]=owner.get();
  }
- m.network=true;m.net=n;m.netTempo=tempo;m.netMix=mix;m.netBypass=bypass;m.netEpoch=p.netEpochCounter;m.device=device;
+ m.network=true;m.net=n;m.master=master;m.netTempo=tempo;m.netMix=mix;m.netBypass=bypass;m.netEpoch=p.netEpochCounter;m.device=device;
  p.head.store(h+1,std::memory_order_release);return true;
 }
 void FxAudio::render(float*out,int frames){
@@ -468,4 +589,5 @@ void FxAudio::render(float*out,int frames){
 void FxAudio::feed(const float*data,int frames,int channels,int rate){impl->push(data,frames,channels,rate);}
 void FxAudio::inputDiscontinuity(){impl->resetRequested=true;}
 void FxAudio::midi(uint8_t b,double seconds){impl->byte(b,seconds);}
+bool FxAudio::mirroring()const{return impl->mirrorOn;}
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "core.hpp"
+#include "performance.hpp"
 #include <atomic>
 #include <memory>
 namespace amalthea {
@@ -18,6 +19,8 @@ struct AudioStats {
  // and the FM1 tracks heard in the last 30 seconds (bit per track).
  std::array<std::atomic<float>,15> lifebloodLevels{};
  std::atomic<uint8_t> lifebloodHeard{0};
+ std::atomic<float> lifebloodReduction{0};   // the mastering compressor's gain reduction, dB
+ std::atomic<bool> lifebloodMirror{false};   // BIGORNA's effects run after the network (its state received)
  std::atomic<uint64_t> usbOverruns{0},usbUnderruns{0},usbCaptureXruns{0},usbFrames{0},usbCaptureMaxGapUs{0},fxRenderMaxUs{0};
  std::atomic<int> usbFill{0};
   std::array<std::array<std::atomic<int>,Columns>,Tracks> columnRow{};
@@ -39,6 +42,8 @@ public:
   ~Audio();
   bool submit(const Project &, bool playing, int auditionTrack=-1, const Step *auditionStep=nullptr,const DeviceSettings *device=nullptr,bool endAudition=false,PatternSync sync={});
   void render(float *stereo, int frames);
+  // PERFORMANCE: the chain to play now (producer thread; latest wins, never blocks).
+  void perform(const PerfFrame &);
   AudioStats stats;
 
 private:

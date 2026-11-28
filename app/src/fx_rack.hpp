@@ -56,6 +56,23 @@ struct MidiTrackPan {
 };
 // A received CC 10 value as a stereo position 0 (left) .. 1 (right); 64 is the centre.
 float midiPanPosition(int value);
+// BIGORNA's effects state (build 122, USB TRACKS): SysEx F0 7D 46 42 <kind> .. F7, 7-bit bytes,
+// 14-bit values high byte first. Its stems are taken before the sends, so LIFEBLOOD runs the same
+// effects (bigorna_master) from this state.
+//   1 the effects: version 1, CHORUS 7, DELAY 8, REVERB 7, COMP 8 (0..127), the tempo x 10
+//   2 each track's CHORUS, DELAY, REVERB send in force, Q15 / 2 (16383: all of it)
+//   3 each return's ducking gain (CHORUS, DELAY, REVERB), Q16 / 4 (16383: none)
+struct Fm1FxMessage {
+ uint8_t kind=0;
+ std::array<uint8_t,30> fx{};            // kind 1: CHORUS, DELAY, REVERB, COMP
+ int bpm10=1200;
+ std::array<int32_t,18> sends{};          // kind 2: track t's chorus, delay, reverb at t*3 .. : Q15
+ std::array<int32_t,3> duck{{65536,65536,65536}};   // kind 3: Q16
+};
+struct MidiFxMirror {
+ std::array<uint8_t,48> buf{};int n=0;bool in=false;Fm1FxMessage msg;
+ bool byte(uint8_t);   // true when msg holds a complete message
+};
 struct UsbMapping {int count=0,offset=0;bool stereo=false;};
 UsbMapping fm1Mapping(int firmware,int channels);
 const char* fm1Name(int firmware);

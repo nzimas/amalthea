@@ -31,13 +31,14 @@
   <article class="machine tracker">
     <img src="assets/screens/tracker.png" width="1024" height="768" alt="The Tracker's pattern page" loading="lazy">
     <h3>Tracker</h3>
-    <p>Twelve tracks, each with five independently clocked columns (NOTE, MOD, INST, FX1, FX2), 19 playback
-      directions, conditional events, per-step effects and transposition. Hold X and any column is drawn for you, at random or
-      euclidean, at the density you choose, in 38 scales.</p>
+    <p>Twelve tracks of fifteen instruments each, with five independently clocked columns (NOTE, MOD, INST, FX1,
+      FX2), 19 playback directions, a condition for every parameter of a step, per-step effects, transposition and
+      random redraws. Hold X and any column is drawn for you, at random or euclidean, at the density you choose, in
+      38 scales. PERFORMANCE mode plays effect chains and LFOs over the pattern without touching it.</p>
   </article>
   <article class="machine fx">
     <img src="assets/screens/fx-rack.png" width="1024" height="768" alt="The FX rack: six strips, two slots each" loading="lazy">
-    <h3>FX</h3>
+    <h3>FX Rack</h3>
     <p>An effect rack for the M-VAVE FM-1's multitrack USB audio. Each of its tracks runs through two inserts, and
       each insert has a 16-step sequencer of parameter locks, clocked by the FM-1.</p>
   </article>
@@ -46,7 +47,8 @@
     <h3>Lifeblood</h3>
     <p>The FM-1's tracks through a generated network of effects, drawn as a living vascular field. Grow it from a
       recipe, rewire it, and let it mutate on its own. Each track keeps the place the FM-1 pans it, and every
-      synced effect follows the FM-1's clock.</p>
+      synced effect follows the FM-1's clock. A mastering stage, a 10-band EQ into a bus compressor, has profiles for
+      power noise, rhythmic noise, industrial techno, dark synthwave, dark ambient, acousmatic and textural work.</p>
   </article>
 </div>
 
@@ -71,7 +73,7 @@
   <figure class="new">
     <figcaption>Amalthea Linux</figcaption>
     <ol>
-      <li class="app">Amalthea: Tracker · FX · LIFEBLOOD<small>framebuffer and ALSA, no UI framework</small></li>
+      <li class="app">Amalthea: Tracker · FX RACK · LIFEBLOOD<small>framebuffer and ALSA, no UI framework</small></li>
       <li>Supervisor: blank, stopped start; restart on failure</li>
       <li>BusyBox init, built from source; read-only root (13 MB)</li>
       <li class="kept">The same board helpers</li>
@@ -83,8 +85,8 @@
 
 <h2 id="features">Shared resources</h2>
 <dl class="features">
-  <dt>Twelve engines</dt><dd>VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT, CALIGULA and FM
-    DRUM. In the Tracker, each track has its own twelve sounds.</dd>
+  <dt>Fifteen engines</dt><dd>VAP, PERC, CHIP, FIBER, HIVE, OP4, ANIMA, RUSSOLO, BAY AREA, RESURGENT, CALIGULA, FM
+    DRUM, OBRADOR, and Mutable Instruments' RINGS and PLAITS. In the Tracker, each track has its own fifteen sounds.</dd>
   <dt>Generators</dt><dd>Melodic idioms, drum patterns, euclidean rhythms, sounds, effects and their parameters,
     drawn with X at the density you set; fresh entropy on every start. FUNC + hold X gives every step its own
     variation of its instrument's sound, with the pitch untouched.</dd>

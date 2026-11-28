@@ -7,21 +7,21 @@ using namespace amalthea;
 static void require(bool ok,const char *s) { if(!ok){fprintf(stderr,"FAIL: %s\n",s);std::exit(1);} }
 int main() {
   Editor e; e.project=demoProject();e.column=2;
-  e.action(Action::Enter);e.action(Action::Right);
+  e.action(Action::Enter);e.action(Action::Up);
   require(e.pending.fx[0].type==FxType::Wavefold && e.effectBanner,"right chooses effect and announces it");
-  e.action(Action::Up);e.action(Action::Up);e.action(Action::Left);
+  e.action(Action::Right);e.action(Action::Up);e.action(Action::Up);e.action(Action::Left);e.action(Action::Down);
   require(e.pending.fx[0].type==FxType::None && e.pending.fx[0].value==DefaultFxMix+2,"a new effect starts half wet; left chooses type without destroying the mix");
-  e.action(Action::Left);
+  e.action(Action::Down);
   require(e.pending.fx[0].type==FxType::Random,"effect selection wraps (RANDOM is last)");
-  for(int i=0;i<150;i++)e.action(Action::Up);
+  e.action(Action::Right);for(int i=0;i<150;i++)e.action(Action::Up);
   require(e.pending.fx[0].value==100,"percentage upper bound");
   e.action(Action::Cancel);
-  require(e.project.tracks[0].steps[0].fx[0].type==FxType::None,"cancel does not apply preview");
+  require(!e.editing&&e.project.tracks[0].steps[0].fx[0].type==FxType::None,"cancel does not apply preview");
   e.action(Action::Session);e.action(Action::Enter);e.action(Action::Enter);e.action(Action::Right);e.action(Action::Down);e.action(Action::Enter);e.action(Action::Right);
   require(e.project.bpm==121 && e.project.scale==2,"session tempo and scale controls");
   e.action(Action::Down);e.action(Action::Enter);e.action(Action::Right);
   require(e.project.root==1,"session root control");
-  e.action(Action::Master);auto tr=e.track;e.action(Action::NextTrack);
+  e.action(Action::ShiftDown);e.action(Action::Master);e.action(Action::ShiftUp);require(e.page==Page::Master,"SHIFT + Y opens the master effects");auto tr=e.track;e.action(Action::NextTrack);
   require(e.masterModule==3 && e.track==tr,"master module navigation preserves track");
   e.action(Action::Right);require(e.project.master.macros[1].value[0]==66,"master percentage control");
   e.action(Action::ShiftDown);e.action(Action::ShiftUp);require(!e.shift,"modifier releases on settings pages");

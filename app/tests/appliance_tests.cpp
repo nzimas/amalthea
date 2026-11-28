@@ -9,12 +9,13 @@
 #include <unistd.h>
 using namespace amalthea;
 static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL: %s\n",m);exit(1);}}
-static void chosen(const Step&from,Step&to,int col,int tab){
+static void chosen(const Step&from,Step&to,int col,int tab,int field){
  bool fx=col==2||col==3;
- if(tab==(col==0||fx?2:1))eventCondition(to,col)=eventCondition(from,col);
+ if(field==((fx&&tab==0)||col==4?2:1))parameterCondition(to,col,tab)=parameterCondition(from,col,tab);
  else if(col==0&&tab==1)to.length=from.length;
  else if(fx&&tab==1)to.fx[col-2].length=from.fx[col-2].length;
- else if(col==0&&tab>=3)to.locks[tab-3]=from.locks[tab-3];
+ else if(fx&&tab==2)to.fx[col-2].random=from.fx[col-2].random;
+ else if(col==0&&tab>=2)to.locks[tab-2]=from.locks[tab-2];
  else if(col==0)to.note=from.note;
  else if(col==1)to.instrument=from.instrument;
  else if(col<4)to.fx[col-2].value=from.fx[col-2].value;
@@ -22,24 +23,24 @@ static void chosen(const Step&from,Step&to,int col,int tab){
 }
 static void openExit(Editor&e){e.action(Action::Shift2Up);e.action(Action::ShiftUp);e.action(Action::Shift2Down);e.action(Action::ShiftDown);}
 int main(int argc,char**argv){
- for(int col=0;col<Columns;col++)for(int tab=0;tab<(col==0?10:col==2||col==3?3:2);tab++){
+ for(int col=0;col<Columns;col++)for(int tab=0;tab<(col==0?2+NoteParameters:col==2||col==3?3:1);tab++)for(int field=0;field<((col==2||col==3)&&tab==0||col==4?3:2);field++){
   Editor e;e.project=blankProject();auto&t=e.project.tracks[0];t.columns[col].length=7;
   for(int r=0;r<MaxRows;r++){auto&s=t.steps[r];s.note=60+r%12;s.instrument=1;s.fx[0]={FxType::Rings,40};s.fx[1]={FxType::LoFi,70};s.modifier={7,ModifierType::Offset};}
-  e.column=col;e.action(Action::Enter);e.eventTab=tab;auto before=e.project;auto pending=e.pending;auto serial=e.auditionSerial;
+  e.column=col;e.action(Action::Enter);e.eventTab=tab;e.eventField=field;auto before=e.project;auto pending=e.pending;auto serial=e.auditionSerial;
   auto encoded=encodeProject(e.project);e.action(Action::RandomizerOptions);
-  check(e.editing&&e.page==Page::Pattern&&(col==0||col==4)==(e.auditionSerial>serial),"tap stays in editor; only the NOTE column auditions");
+  check(e.editing&&e.page==Page::Pattern&&((col==0&&tab==0&&field==0)||col==4)==(e.auditionSerial>serial),"tap stays in editor; only the note itself (or MOD) auditions");
   check(encodeProject(e.project)==encoded,"single parameter randomization remains transactional");
-  auto expected=pending;chosen(e.pending,expected,col,tab);check(!memcmp(&expected,&e.pending,sizeof(Step)),"tap changes only selected parameter");
-  if(col==0&&tab==4)check(e.pending.locks[NoteVolume]>=10,"volume floor10");
+  auto expected=pending;chosen(e.pending,expected,col,tab,field);check(!memcmp(&expected,&e.pending,sizeof(Step)),"tap changes only selected parameter");
+  if(col==0&&tab==2+NoteVolume&&field==0)check(e.pending.locks[NoteVolume]>=10,"volume floor10");
   e.action(Action::Cancel);check(encodeProject(e.project)==encoded,"cancel discards random value and PRNG changes");
-  e.action(Action::Enter);e.eventTab=tab;e.action(Action::ShiftDown);serial=e.auditionSerial;e.action(Action::RandomizeColumn);
-  if(col==2||col==3){   // in the FX editor Shift+hold X draws a new pending effect instead
+  e.action(Action::Enter);e.eventTab=tab;e.eventField=field;e.action(Action::ShiftDown);serial=e.auditionSerial;e.action(Action::RandomizeColumn);
+  if((col==2||col==3)&&field<(tab==0?2:1)){   // in the FX editor Shift+hold X on a value draws a new pending effect instead
    check(e.editing&&e.undoStack.empty()&&encodeProject(e.project)==encodeProject(before),"Shift+hold X on FX stays pending");
    e.action(Action::ShiftUp);e.action(Action::Cancel);continue;
   }
-  check(e.editing&&(col==0||col==4)==(e.auditionSerial>serial)&&e.undoStack.size()==1,"shift hold is one undoable bulk edit and stays editing");
+  check(e.editing&&((col==0&&tab==0&&field==0)||col==4)==(e.auditionSerial>serial)&&e.undoStack.size()==1,"shift hold is one undoable bulk edit and stays editing");
   for(int tr=0;tr<Tracks;tr++)for(int r=0;r<MaxRows;r++){
-   auto expected=before.tracks[tr].steps[r];if(tr==0&&r<7)chosen(e.project.tracks[tr].steps[r],expected,col,tab);
+   auto expected=before.tracks[tr].steps[r];if(tr==0&&r<7)chosen(e.project.tracks[tr].steps[r],expected,col,tab,field);
    check(!memcmp(&expected,&e.project.tracks[tr].steps[r],sizeof(Step)),"bulk affects only parameter within current column length");
   }
   e.action(Action::ShiftUp);e.action(Action::Undo);check(encodeProject(e.project)==encodeProject(before),"undo restores all values and seed");

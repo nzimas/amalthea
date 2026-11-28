@@ -36,7 +36,7 @@ hardware fundamentally incapable. Upstream Linux 4.9 has a
 
 A custom two-way bulk protocol is a separate possible investigation, requiring a
 host helper and latency tests; it would not automatically appear as a normal USB
-sound card. The FX appliance now implements host-side capture through ALSA; gadget audio remains unchanged.
+sound card. The FX RACK appliance now implements host-side capture through ALSA; gadget audio remains unchanged.
 
 ## Planned appliance capability
 
@@ -44,14 +44,14 @@ The owner specifically wants direct multichannel FM1 capture and separate
 application routing on the Brick. This uses host mode, independent of the gadget
 limitations above. [JIANT's primary manual](https://github.com/juanjiant-bit/JIANT/blob/main/docs/MANUAL.md)
 documents eight USB channels from FM1: six mono tracks plus stereo FX returns.
-Host capture is implemented in 0.20.0; see [FX appliance](FX-APPLIANCE.md). Physical FM1 streaming remains unverified until a source is connected.
+Host capture is implemented in 0.20.0; see [FX RACK appliance](FX RACK-APPLIANCE.md). Physical FM1 streaming remains unverified until a source is connected.
 
 ## Bottom-port diagnosis — 21 November 2026
 
 The owner's FM1 test used the bottom port. Live inspection found
 `/sys/devices/platform/soc/usbc0/otg_role` reporting `usb_device`; the kernel
 recorded gadget disconnection/reconnection, with no FM1 host enumeration and only
-the internal codec in ALSA. The original FX backend did not switch this port's
+the internal codec in ALSA. The original FX RACK backend did not switch this port's
 role. Therefore its host capture could not discover the attached FM1 in that mode.
 
 Vendor `/usr/trimui/bin/usb_host.sh` switches through a **read-trigger**:
@@ -65,7 +65,7 @@ still unverified; role-control availability alone is not a streaming test.
 `tools/usb_diagnostics.sh` passively records USB identities, ALSA stream descriptors,
 role and relevant kernel messages in `logs/usb/latest.txt` and `previous.txt` under
 the installed application directory. Only changed snapshots are persisted. It does
-not change the role or open capture. The FX host additionally publishes its latest
+not change the role or open capture. The FX RACK host additionally publishes its latest
 scan/open failure in `/tmp/amalthea-usb-status`, avoiding an unexplained waiting
 state when an ALSA candidate exists but cannot stream.
 
@@ -88,21 +88,21 @@ Version 0.21 device QA confirmed short-X density, hold-X generated triggers and
 an internal playhead visible on the second row. Startup remained blank/stopped;
 no live sessions were saved, loaded or restored.
 
-## Permanent FX role handling — 0.21.1
+## Permanent FX RACK role handling — 0.21.1
 
-The timed host trial is no longer needed for normal FX use. Native `BrickUsbRole`
-in the non-audio USB thread observes the passive UDC state while FX is selected.
+The timed host trial is no longer needed for normal FX RACK use. Native `BrickUsbRole`
+in the non-audio USB thread observes the passive UDC state while FX RACK is selected.
 It waits for `not attached` to remain stable for three seconds before triggering
 host mode and enabling `axp_5v`. A configured/attached laptop cancels that transition.
-There is no host timeout. Exiting FX closes capture, restores the previous power
+There is no host timeout. Exiting FX RACK closes capture, restores the previous power
 setting and triggers device mode. The ownership marker identifies the process;
 a later supervisor restart recovers a role left by a dead owner. The manager does
 not restore a host role it did not own. No role changes happen from the audio
 callback and no kernel/gadget configuration is replaced.
 
-For another laptop connection, exit FX to the appliance dashboard first. Plugging
-two USB hosts together while staying in FX cannot establish ADB. Startup remains
-blank and stopped; host mode is tied to explicit entry into FX.
+For another laptop connection, exit FX RACK to the appliance dashboard first. Plugging
+two USB hosts together while staying in FX RACK cannot establish ADB. Startup remains
+blank and stopped; host mode is tied to explicit entry into FX RACK.
 
 ## USB audio output to a host (UAC2 gadget) — feasibility, 22 November 2026
 
@@ -138,8 +138,8 @@ Trial (RAM-only, kernel uptime 10092 s, no reboot, no session saved/loaded):
   "Amalthea Audio".
 
 Not yet verified: Android/phone hosts, more than 2 channels, 24-bit, long-duration
-streaming, and coexistence with FX host mode (the bottom port is the only OTG
-port, so FX host capture and gadget output cannot run on it simultaneously).
+streaming, and coexistence with FX RACK host mode (the bottom port is the only OTG
+port, so FX RACK host capture and gadget output cannot run on it simultaneously).
 The gadget is paced by the host's USB clock, independent of the codec clock;
 an appliance feeding both needs drift handling between them.
 
@@ -147,7 +147,7 @@ Poco X7 Pro (OTG on), Brick in the dashboard (device role), 22 November 2026: a
 passive logger on the Brick recorded `otg_id` (gpio-232) high and `axp2202-usb
 online=0` for the whole attachment (1121–1180 s uptime). The phone supplied no
 VBUS and the Brick's role line never changed; no gadget connection occurred. The
-same phone and cable host the FM1. With FX entered, the Brick sources 5 V as host
+same phone and cable host the FM1. With FX RACK entered, the Brick sources 5 V as host
 and the phone enumerates as a USB device instead. The Brick exposes no Type-C
 controller to Linux (no TCPC driver, `/sys/class/typec` absent).
 
@@ -173,7 +173,7 @@ blank and stopped. Log: `USB-C port mode: sink`, `USB audio function added`,
 "Amalthea Audio", 2 input channels, 44100 Hz. With an owner-started tracker
 sequence, a 31 s native CoreAudio capture had peak −0.4 dBFS, RMS −13.9 dBFS,
 no zero-run dropouts, no click candidates and no host timeline jumps.
-Phone capture of appliance audio and FX-mode switching with the new build are
+Phone capture of appliance audio and FX RACK-mode switching with the new build are
 not yet verified. Stems are not yet exposed.
 
 Replug fault and fix (builds 7–8): the owner's Poco capture after an unplug from
@@ -188,7 +188,7 @@ After reboot the app had to set sink mode, confirming the board resets `E3` to
 dual-role at boot.
 
 Build 8 owner verification, 22 November 2026 (kernel log, uptime): Poco X7 Pro
-recorded the playing tracker sequence over USB (configured 419–487 s). FX then
+recorded the playing tracker sequence over USB (configured 419–487 s). FX RACK then
 switched the port to host (513 s), hosted the FM1 at full speed (524–560 s),
 and returned to device mode on exit (568 s); the Mac reattached at 584 s. The
 owner confirmed both scenarios work as intended. No kernel errors.

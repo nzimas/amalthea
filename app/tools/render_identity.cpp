@@ -11,5 +11,5 @@ int main(int argc,char**argv){
   e.splash=false;e.page=Page::Appliances;drawUI(c,e,stats);writePPM(c,dir+"/home.ppm");
   std::ofstream(dir+"/amalthea.svg")<<amaltheaMarkSVG(0,0xe8603c,"Amalthea horn of plenty");
   std::ofstream(dir+"/tracker.svg")<<amaltheaMarkSVG(1,0x6ee7dc,"Amalthea Tracker");
-  std::ofstream(dir+"/fx.svg")<<amaltheaMarkSVG(2,0xb39aff,"Amalthea FX");
+  std::ofstream(dir+"/fx.svg")<<amaltheaMarkSVG(2,0xb39aff,"Amalthea FX Rack");
 }

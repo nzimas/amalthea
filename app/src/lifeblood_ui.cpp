@@ -6,6 +6,7 @@
 #include "fx_rack.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 namespace amalthea {
 namespace {
 constexpr uint32_t InColor=0xff7a45,OutColor=0xf1edd4,Key=0xf47b5b,Ink=0x07080b,Dim=0x8d99a8,Ivory=0xf3f1ea,Amber=0xffb35c,Accent=0x3fd9d0;
@@ -64,7 +65,7 @@ void drawLifebloodUI(Canvas&c,const Editor&e,const AudioStats&audio){
  drawLifebloodMark(c,X(24),X(14),X(76),Accent);text(120,25,600,"AMALTHEA / LIFEBLOOD",38);
  drawBattery(c,X(868),X(32),X(24),e.battery,e.charging,Dim);
  int state=audio.usbState.load(),channels=audio.usbChannels.load();
- std::string input=state==0?(audio.usbPort==1?"USB: COMPUTER LINK":audio.usbPort==2?"USB: STARTING HOST":audio.usbPort==3?"USB HOST: WAITING":audio.usbPort==4?"USB: PORT ERROR":"USB: WAITING"):state==1?std::string(fm1Name(audio.usbFirmware))+" / "+std::to_string(channels)+" TRACKS":state==4?std::string(fm1Name(audio.usbFirmware))+" / STEREO":state==2?"USB: FORMAT UNSUPPORTED":state==5?"USB: NO AUDIO INPUT":"USB: OPEN FAILED";
+ std::string input=state==0?(audio.usbPort==1?"USB: COMPUTER LINK":audio.usbPort==2?"USB: STARTING HOST":audio.usbPort==3?"USB HOST: WAITING":audio.usbPort==4?"USB: PORT ERROR":"USB: WAITING"):state==1?std::string(fm1Name(audio.usbFirmware))+" / "+std::to_string(channels)+" TRACKS"+(audio.lifebloodMirror?" + FX":""):state==4?std::string(fm1Name(audio.usbFirmware))+" / STEREO":state==2?"USB: FORMAT UNSUPPORTED":state==5?"USB: NO AUDIO INPUT":"USB: OPEN FAILED";
  text(24,114,470,input,30,Dim);
  std::string status;uint32_t statusColor=Dim;
  if(e.lbBypass){status="BYPASS";statusColor=Amber;}
@@ -89,13 +90,54 @@ void drawLifebloodUI(Canvas&c,const Editor&e,const AudioStats&audio){
   return;
  }
  if(e.page==Page::LifebloodSettings){
-  text(24,187,976,"SESSION SETTINGS",38,Accent);
-  const char*names[]={"TEMPO","PATH","CHARACTER","NODES","GROWTH","MIX"};
-  int rate=int(std::lround(6+114*s.growth/100.f));
-  std::string values[]={(audio.usbClock&&audio.usbBpm>0?"EXT "+std::to_string(int(audio.usbBpm.load()+.5f))+" BPM":std::to_string(s.tempo)+" BPM"),lifebloodPathName(s.path),lifebloodCharacterName(s.character),"UP TO "+std::to_string(s.maxNodes),
-   std::to_string(s.growth)+"% / "+std::to_string(rate)+" PER MIN",std::to_string(s.mix)+"% WET"};
-  for(int f=0;f<LifebloodSettingsFields;f++){int y=250+f*78;bool selected=e.lbSettingsField==f;if(selected)box(24,y-8,976,70,Accent);
-   text(48,y,400,names[f],40,selected?Ink:Dim);text(430,y,546,values[f],40,selected?Ink:Ivory);}
+  const auto&m=s.master;const int tab=e.lbSettingsTab;
+  text(24,187,640,"SESSION SETTINGS",38,Accent);
+  if(tab==1){   // the compressor's gain reduction, live
+   float gr=audio.lifebloodReduction.load();char v[24];std::snprintf(v,sizeof v,"GR %.1f DB",gr);
+   text(690,193,170,m.compOn?v:"GR --",28,m.compOn&&gr>.05f?Amber:Dim);
+   box(870,197,130,22,0x1f2833);if(m.compOn)box(870,197,int(130*std::min(1.f,gr/24)),22,Amber);
+  }
+  // Tabs (F1 / F2), two at a time, as in the Tracker's step editor.
+  static const char*tabs[LifebloodSettingsTabs]={"GENERAL","COMP","EQ"};
+  int start=std::max(0,std::min((tab/2)*2,LifebloodSettingsTabs-2));
+  for(int i=0;i<2;i++){int t=start+i,x=24+i*492;bool selected=t==tab;box(x,240,484,48,selected?Accent:0x1f2833);
+   text(x+18,246,300,tabs[t],30,selected?Ink:Ivory);
+   bool on=t==1?m.compOn:t==2?m.eqOn:false;if(t)text(x+380,250,90,on?"ON":"OFF",24,selected?Ink:on?Accent:Dim);}
+  auto row=[&](int y,int height,bool selected,const std::string&name,const std::string&value){
+   if(selected)box(24,y-6,976,height-8,Accent);text(48,y,400,name,36,selected?Ink:Dim);text(470,y,506,value,36,selected?Ink:Ivory);};
+  if(tab==0){
+   const char*names[]={"TEMPO","PATH","CHARACTER","NODES","GROWTH","MIX"};
+   int rate=int(std::lround(6+114*s.growth/100.f));
+   std::string values[]={(audio.usbClock&&audio.usbBpm>0?"EXT "+std::to_string(int(audio.usbBpm.load()+.5f))+" BPM":std::to_string(s.tempo)+" BPM"),lifebloodPathName(s.path),lifebloodCharacterName(s.character),"UP TO "+std::to_string(s.maxNodes),
+    std::to_string(s.growth)+"% / "+std::to_string(rate)+" PER MIN",std::to_string(s.mix)+"% WET"};
+   for(int f=0;f<LifebloodSettingsFields;f++)row(312+f*68,68,e.lbSettingsField==f,names[f],values[f]);
+   return;
+  }
+  if(tab==1){
+   // Six rows at a time; the profile's purpose under the list.
+   int base=e.lbSettingsField/6*6;
+   for(int f=base;f<std::min(base+6,MasterCompFields);f++)row(312+(f-base)*62,62,e.lbSettingsField==f,masterCompFieldName(f),masterCompValue(m,f));
+   text(48,690,700,compProfileUse(m.compProfile),24,Dim);text(820,690,180,base?"PAGE 2 / 2":"PAGE 1 / 2",24,Dim);
+   return;
+  }
+  // EQ: the switch and profile, then the ten bands as faders.
+  row(312,62,e.lbSettingsField==0,"EQ",m.eqOn?"ON":"OFF");
+  row(374,62,e.lbSettingsField==1,"PROFILE",eqProfileName(m.eqProfile));
+  text(48,436,952,eqProfileUse(m.eqProfile),22,Dim);
+  const int top=500,height=170,mid=top+height/2;
+  box(24,mid,976,2,0x1f2833);
+  for(int b=0;b<MasterBands;b++){
+   int x=30+b*97;bool selected=e.lbSettingsField==2+b;int v=m.band[b];
+   if(selected)box(x,top-4,89,height+48,0x123634);
+   box(x+40,top,8,height,0x1f2833);
+   int h=v*(height/2)/MasterBandRange;uint32_t ink=m.eqOn?(selected?Accent:Ivory):Dim;
+   if(h>0)box(x+34,mid-h,20,h,ink);else if(h<0)box(x+34,mid,20,-h,ink);
+   box(x+28,mid-h-3,32,6,selected?0xffffff:ink);
+   std::string value=(v>0?"+":"")+std::to_string(v);
+   centred(x+44,top-28,value,20,selected?Ivory:Dim);
+   std::string hz=MasterBandHz[b]>=1000?std::to_string(MasterBandHz[b]/1000)+"K":std::to_string(MasterBandHz[b]);
+   centred(x+44,top+height+10,hz,22,selected?Ivory:Dim);
+  }
   return;
  }
  if(e.page==Page::LifebloodNode&&lifebloodNodeVertex(e.lbVertex)&&n.live(e.lbVertex)){

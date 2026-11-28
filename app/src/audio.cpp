@@ -18,13 +18,13 @@
 #endif
 extern "C" {
 #include "eng.h"
-extern const eng_t ENG_VAP, ENG_PERC, ENG_CHIP, ENG_FIBER, ENG_HIVE, ENG_OP4, ENG_ANIMA, ENG_RUSSOLO, ENG_BAYAREA, ENG_RESURGENT, ENG_CALIGULA, ENG_FMDRUM;
+extern const eng_t ENG_VAP, ENG_PERC, ENG_CHIP, ENG_FIBER, ENG_HIVE, ENG_OP4, ENG_ANIMA, ENG_RUSSOLO, ENG_BAYAREA, ENG_RESURGENT, ENG_CALIGULA, ENG_FMDRUM, ENG_OBRADOR, ENG_RINGS, ENG_PLAITS;
 int32_t eng_bpm10 = 1200;
 void amalthea_patch(int, uint32_t, int32_t *);
 void amalthea_patch_variant(int, uint32_t, uint32_t, int32_t *);
 }
 namespace amalthea {
-static const eng_t *engines[] = {&ENG_VAP,&ENG_PERC,&ENG_CHIP,&ENG_FIBER,&ENG_HIVE,&ENG_OP4,&ENG_ANIMA,&ENG_RUSSOLO,&ENG_BAYAREA,&ENG_RESURGENT,&ENG_CALIGULA,&ENG_FMDRUM};
+static const eng_t *engines[] = {&ENG_VAP,&ENG_PERC,&ENG_CHIP,&ENG_FIBER,&ENG_HIVE,&ENG_OP4,&ENG_ANIMA,&ENG_RUSSOLO,&ENG_BAYAREA,&ENG_RESURGENT,&ENG_CALIGULA,&ENG_FMDRUM,&ENG_OBRADOR,&ENG_RINGS,&ENG_PLAITS};
 struct Audio::Impl {
   struct Patch {
     alignas(16) uint8_t data[ENG_CK_MAX]{};
@@ -67,6 +67,11 @@ struct Audio::Impl {
   // (with their processors prepared); the audio thread only picks one at each trigger.
   static constexpr int RandomDraws=8;
   struct RandomPool { int count=0; std::array<Effect,RandomDraws> effect{}; std::array<InsertSettings,RandomDraws> settings{}; };
+  // FX cells set to RANDOM: parameter sets drawn off the audio thread for each (track, slot,
+  // effect) such a cell uses, shared out of one pool; each trigger takes one of its key's draws,
+  // never the one that slot took last.
+  static constexpr int ParamDraws=48;
+  struct ParamPool { int count=0; std::array<uint8_t,ParamDraws> slot{}; std::array<FxType,ParamDraws> type{}; std::array<InsertSettings,ParamDraws> settings{}; };
   struct Message {
     Project project;
     DeviceSettings device;
@@ -75,6 +80,7 @@ struct Audio::Impl {
     std::array<Patch, Tracks*Instruments> patches{};
     std::array<PortedPointers,Tracks*2> ported{};
     std::array<RandomPool,Tracks*2> random{};
+    ParamPool params{};
     VariantTable variants{};
     unsigned seq=0;
     PatternSync sync{};
@@ -90,10 +96,25 @@ struct Audio::Impl {
   std::array<RandomPool,Tracks*2> preparedRandom{},random{};
   std::array<uint32_t,Tracks*2> preparedRandomSeed{};
   std::array<InsertSettings,Tracks*2> insertKeep{};   // a RANDOM row's current draw (kept across edits)
+  ParamPool preparedParams{},params{};uint32_t preparedParamsSeed=0;
+  std::array<int,Tracks*2> lastParamDraw=[]{std::array<int,Tracks*2>a{};a.fill(-1);return a;}();
   uint32_t randomPick=0x2f6b1d3u;
+  uint32_t modifierPick=0x6d2b79f5u;   // RANDOM MOD cells' draws
   // A RANDOM step resolved to one of its slot's drawn configurations: the insert takes the draw's
   // settings, and its amount is the draw's scaled by the step's AMOUNT (0 bypasses).
   Effect resolveRandom(int t,int slot,Effect f){
+    if(f.random&&f.type!=FxType::None&&f.type!=FxType::Random){
+      // A RANDOM cell: the chosen effect with one of its drawn parameter sets, at the cell's own mix.
+      int key=t*2+slot,matches=0,last=-1;
+      for(int k=0;k<params.count;k++)if(params.slot[k]==key&&params.type[k]==f.type){if(k==lastParamDraw[key])last=matches;matches++;}
+      if(!matches){insertKeep[key]=project.tracks[t].inserts[slot];return f;}   // (more keys than draws: the track's)
+      randomPick^=randomPick<<13;randomPick^=randomPick>>17;randomPick^=randomPick<<5;
+      int pick=matches>1&&last>=0?int(randomPick%uint32_t(matches-1)):int(randomPick%uint32_t(matches));
+      if(matches>1&&last>=0&&pick>=last)pick++;
+      for(int k=0;k<params.count;k++)if(params.slot[k]==key&&params.type[k]==f.type&&!pick--){
+        inserts[t][slot].setSettings(params.settings[k]);insertKeep[key]=params.settings[k];lastParamDraw[key]=k;break;}
+      return f;
+    }
     if(f.type!=FxType::Random)return f;
     const auto &pool=random[t*2+slot];
     if(!pool.count||!f.value)return {};
@@ -127,8 +148,16 @@ struct Audio::Impl {
   // starts a new cycle.
   std::array<int,Tracks> transposition{};
   std::array<std::array<int,2>,Tracks> heldLeft{};
+  // The NOTE column's per-note parameters (pan, volume, sends) of the note playing on each track:
+  // taken when a note starts and held until the next one, so the rows after it -- empty, tied or
+  // carrying values of their own -- never move a note that is still sounding.
+  std::array<std::array<uint8_t,NoteParameters>,Tracks> noteLocks=[]{std::array<std::array<uint8_t,NoteParameters>,Tracks> a;for(auto &t:a)t.fill(Inherit);return a;}();
+  // Each track's applied left / right gains, gliding to the block's targets (a full swing in 5 ms,
+  // in a straight line): a change of pan or level is never a step in the signal.
+  std::array<float,Tracks> appliedLeft{},appliedRight{};
   void resetColumn(int t,int c,uint32_t seed){
     transport[t][c]=Transport{};
+    if(c==0)noteLocks[t].fill(Inherit);
     if(c==2||c==3)heldLeft[t][c-2]=0;
     if(c==4)transposition[t]=0;
     // Equal inherited lanes retain the old track traversal, including random directions.
@@ -143,11 +172,15 @@ struct Audio::Impl {
     const auto &tr=project.tracks[t];
     auto at=[&](int c)->const Step&{return tr.steps[std::max(0,transport[t][c].row)];};
     auto enabled=[&](int c){return conditionMatches(eventCondition(at(c),c),transport[t][c].currentCycle);};
-    Step step;step.note=at(0).note;step.condition=at(0).condition;step.length=at(0).length;
-    if(conditionMatches(step.condition,transport[t][0].currentCycle))step.locks=at(0).locks;
+    // Each NOTE parameter on its own condition: LENGTH falls back to one step, a lock to the track's value.
+    const uint64_t noteCycle=transport[t][0].currentCycle;
+    Step step;step.note=at(0).note;step.condition=at(0).condition;
+    step.length=conditionMatches(at(0).lengthCondition,noteCycle)?at(0).length:1;
+    if(conditionMatches(step.condition,noteCycle))for(int k=0;k<NoteParameters;k++)
+      if(conditionMatches(at(0).lockConditions[k],noteCycle))step.locks[k]=at(0).locks[k];
     step.instrument=enabled(1)?at(1).instrument:NoInstrument;step.variation=enabled(1)?at(1).variation:0;
     for(int slot=0;slot<2;slot++){
-      auto f=enabled(slot+2)?at(slot+2).fx[slot]:Effect{};
+      auto f=playedEffect(at(slot+2),slot,transport[t][slot+2].currentCycle);
       step.fx[slot]=f.type!=FxType::None?f:heldLeft[t][slot]>0?heldFx[t][slot]:Effect{};
     }
     for(auto &fx:step.fx)if(!device.insertEnabled(fx.type))fx={};
@@ -173,6 +206,79 @@ struct Audio::Impl {
   MasterEffects master{true};
   std::array<TrackMacros,Tracks> macros{};
   std::array<std::array<InsertEffect, 2>, Tracks> inserts{};
+  // PERFORMANCE chains: one chain of PerfStages processors for each target slot. The
+  // producer owns the ported processors (created on demand, never freed while the audio
+  // runs) and hands their pointers over with each frame through a triple buffer.
+  struct PerfMail { PerfFrame frame; std::array<PortedPointers,PerfTargets*PerfStages> ported{}; };
+  std::array<std::array<InsertEffect,PerfStages>,PerfTargets> perfInserts{};
+  std::array<std::array<std::unique_ptr<PortedProcessor>,PortedTypes>,PerfTargets*PerfStages> perfPorted{};
+  std::array<PerfMail,3> perfMail{};
+  std::atomic<uint8_t> perfMiddle{1};uint8_t perfBack=0,perfFront=2;
+  PerfFrame perf{};
+  std::array<int,PerfTargets> perfOwner{{-1,-1,-1}};   // the track each chain processes (and rings out on)
+  bool perfFresh=false;
+  // PERFORMANCE Y: each target instrument as it plays now, cooked on the producer thread.
+  // Live (VAP, PERC, CHIP): sounding voices take it at once; every engine: new notes.
+  struct PerfVoiceMail { std::array<PerfFrame::Instrument,PerfTargets> info{}; std::array<Patch,PerfTargets> patch{}; };
+  std::array<PerfVoiceMail,3> perfVoiceMail{};
+  std::atomic<uint8_t> perfVoiceMiddle{1};uint8_t perfVoiceBack=0,perfVoiceFront=2;bool perfVoiceValid=false;
+  std::array<PerfFrame::Instrument,PerfTargets> perfVoiceLast{};std::array<Patch,PerfTargets> perfVoiceCooked{};   // (producer's)
+  void takePerformanceVoices(){
+    if(!(perfVoiceMiddle.load(std::memory_order_acquire)&4))return;
+    const auto before=perfVoiceValid?perfVoiceMail[perfVoiceFront].info:std::array<PerfFrame::Instrument,PerfTargets>{};
+    perfVoiceFront=perfVoiceMiddle.exchange(perfVoiceFront,std::memory_order_acq_rel)&3;perfVoiceValid=true;
+    const auto&m=perfVoiceMail[perfVoiceFront];
+    // A live instrument no longer moved: its sounding notes go back to the instrument itself.
+    for(const auto&old:before){if(old.track<0||!old.live)continue;bool still=false;
+      for(const auto&in:m.info)still|=in.track==old.track&&in.slot==old.slot&&in.engine==old.engine;
+      if(!still)for(auto&v:voices)if(v.active&&!v.audition&&v.track==old.track&&v.instrumentSlot==old.slot&&v.engine==old.engine)v.patch=patches[old.track*Instruments+old.slot];}
+    for(int k=0;k<PerfTargets;k++){const auto&in=m.info[k];if(in.track<0||!in.live)continue;
+      for(auto&v:voices)if(v.active&&!v.audition&&v.track==in.track&&v.instrumentSlot==in.slot&&v.engine==in.engine)v.patch=m.patch[k];}
+  }
+  const Patch *perfPatch(int t,int slot,int engine,bool &live,uint32_t &variation)const{
+    if(!perfVoiceValid)return nullptr;
+    const auto&m=perfVoiceMail[perfVoiceFront];
+    for(int k=0;k<PerfTargets;k++){const auto&in=m.info[k];
+      if(in.track==t&&in.slot==slot&&in.engine==engine){live=in.live;variation=in.variation;return &m.patch[k];}}
+    return nullptr;
+  }
+  void takePerformance(){
+    if(!(perfMiddle.load(std::memory_order_acquire)&4))return;
+    perfFront=perfMiddle.exchange(perfFront,std::memory_order_acq_rel)&3;
+    const auto&mail=perfMail[perfFront];
+    bool newChain=mail.frame.generation!=perf.generation;
+    perf=mail.frame;perfFresh=true;
+    for(int k=0;k<PerfTargets;k++)for(int i=0;i<PerfStages;i++){
+      auto&ins=perfInserts[k][i];ins.attachPorted(mail.ported[k*PerfStages+i]);
+      if(newChain&&ins.setting().type!=FxType::None)ins.configure({},project.bpm);   // the old chain rings out
+    }
+  }
+  // Each block: a target's chain plays on its stretch of rows, and is bypassed (its
+  // tails ringing out) outside it, when bypassed, or when the mode is left.
+  void applyPerformance(){
+    takePerformance();takePerformanceVoices();
+    for(int k=0;k<PerfTargets;k++){
+      int tr=perf.on?perf.target[k].track:-1;bool in=false;
+      if(tr>=0&&tr<Tracks&&playing){
+        int length=columnLength(project.tracks[tr],0),row=transport[tr][0].row;
+        in=row>=0&&((row-perf.target[k].start)%length+length)%length<perf.target[k].length;
+      }
+      if(tr>=0&&tr!=perfOwner[k]){if(perfOwner[k]>=0)for(auto&ins:perfInserts[k])ins.clear();perfOwner[k]=tr;}
+      for(int i=0;i<PerfStages;i++){
+        auto&ins=perfInserts[k][i];
+        Effect want=in&&i<perf.stages?perf.effect[i]:Effect{};
+        if(want.type!=FxType::None&&!device.insertEnabled(want.type))want={};
+        auto now=ins.setting();
+        if(want.type!=FxType::None&&(perfFresh||want.type!=now.type))ins.setSettings(perf.settings[i]);
+        if(want.type!=now.type||want.value!=now.value)ins.configure(want,project.bpm);
+      }
+    }
+    perfFresh=false;
+  }
+  void processPerformance(int tr){
+    for(int k=0;k<PerfTargets;k++)if(perfOwner[k]==tr)for(auto&ins:perfInserts[k])
+      if(ins.setting().type!=FxType::None||ins.tailCount()>0)ins.processBlock(trackAudio[tr].data(),ENG_BLK);
+  }
   std::array<std::array<float, ENG_BLK * 2>, Tracks> trackAudio{};
   std::array<bool,Tracks> auditionActive{},auditionMixActive{};
   std::array<Step,Tracks> auditionSteps{};
@@ -252,12 +358,17 @@ struct Audio::Impl {
       if(!device.insertEnabled(type))continue;
       if(type!=FxType::Delay&&type!=FxType::Reverb&&type!=FxType::Pan&&type!=FxType::Volume)insert.processBlock(trackAudio[tr].data(),ENG_BLK);
     }
+    processPerformance(tr);   // PERFORMANCE: after the track's own FX
     // The same disjoint-track worker covers the new macros. Complete each
     // track's inserts, gain/pan and macro chain before the shared master sum.
+    constexpr float glide=1.f/220;   // a gain moves at most 1 in 5 ms, in a straight line, and lands exactly on its target
+    float gl=appliedLeft[tr],gr=appliedRight[tr];
     for(int frame=0;frame<ENG_BLK;frame++){
       float &l=trackAudio[tr][frame*2],&r=trackAudio[tr][frame*2+1];
-      l*=currentLeft[tr];r*=currentRight[tr];macros[tr].process(l,r,currentMix[tr].macro);
+      gl+=std::clamp(currentLeft[tr]-gl,-glide,glide);gr+=std::clamp(currentRight[tr]-gr,-glide,glide);
+      l*=gl;r*=gr;macros[tr].process(l,r,currentMix[tr].macro);
     }
+    appliedLeft[tr]=gl;appliedRight[tr]=gr;
   }
   void startInsertWorker(){
     for(int lane=1;lane<4;lane++)insertWorkers[lane-1]=std::thread([this,lane]{
@@ -301,7 +412,7 @@ struct Audio::Impl {
     if(++clock.advances>=amalthea_walk_period(columnDirection(tr,c),columnLength(tr,c))){clock.advances=0;clock.cycle++;}
     clock.remaining+=stepFrames(t,c);
     if(c==2 || c==3){
-      int slot=c-2;auto f=conditionMatches(eventCondition(tr.steps[clock.row],c),clock.currentCycle)?tr.steps[clock.row].fx[slot]:Effect{};
+      int slot=c-2;auto f=playedEffect(tr.steps[clock.row],slot,clock.currentCycle);
       if(heldLeft[t][slot]>0)heldLeft[t][slot]--;
       bool trigger=f.type!=FxType::None;
       if(trigger){heldFx[t][slot]=f;heldLeft[t][slot]=std::clamp(int(f.length),1,MaxFxLength);}
@@ -324,6 +435,10 @@ struct Audio::Impl {
       const bool kit=identity.engine==1;
       const Patch *varied=variantPatch(t,instrument,variation);
       if(!varied)variation=0;   // (not prepared: the row plays the instrument as it is)
+      // PERFORMANCE Y: the instrument as its LFOs have it now (a recipe engine's variation
+      // is a sound of its own, so it never retriggers a voice of another one).
+      bool perfLive=false;uint32_t perfVariation=0;
+      if(!preview)if(const Patch *moved=perfPatch(t,instrument,identity.engine,perfLive,perfVariation)){varied=moved;if(!perfLive)variation=perfVariation?perfVariation^0x7e4f0000u:0x7e4f0000u;}
       if((nativeEngine(identity.engine)||kit)&&!preview)it=std::find_if(voices.begin(),voices.end(),[&](const Voice&v){return v.active&&!v.audition&&!v.fadeOut&&v.track==t&&v.instrumentSlot==instrument&&v.engine==identity.engine&&v.patchSeed==identity.seed&&v.variation==variation;});
       bool retrigger=it!=voices.end();
       // A different variation of a retriggered instrument is a fresh voice: the one playing
@@ -379,6 +494,8 @@ struct Audio::Impl {
       int note = triggeredNote(s, cycle, transposition[t]);
       if (note < 0)
         return;
+      // A RANDOM MOD cell on this row (its condition met): new values for its targets.
+      if(s.modifier.type==ModifierType::Random)applyRandomModifier(s.modifier,s,note,project,modifierPick);
       float volume = 1;
       const int period=amalthea_walk_period(columnDirection(tr,0),columnLength(tr,0));
       int ties = 1;
@@ -394,6 +511,7 @@ struct Audio::Impl {
       // Monophonic tracks: a note still held when this one starts goes into its own envelope
       // release (never a hard cut: no click), and this one starts with its own attack.
       for(auto &v:voices)if(v.active&&!v.audition&&!v.released&&v.track==t&&!nativeEngine(v.engine))release(v);
+      noteLocks[t]=s.locks;   // this note's pan / volume / sends, until the next note
       int instrument=effectiveInstrument(tr,s);
       startVoice(t,note,instrument,int64_t(stepFrames(t)*(legato?length:length-.2)),false,stats,s.instrument==NoInstrument?0:s.variation);
   }
@@ -442,6 +560,7 @@ struct Audio::Impl {
           for(auto &v:voices)if(v.track==tr){v.active=false;v.released=false;v.gate=0;}
           for(auto &insert:inserts[tr])insert.clear();
           macros[tr].clear();
+          appliedLeft[tr]=appliedRight[tr]=0;   // (as a fresh track: the gains glide in from silence)
           stats.meters[tr].store(0);
         }
         for(int c=0;c<Columns;c++){
@@ -481,7 +600,7 @@ struct Audio::Impl {
       project = m.project;
       bool anySolo=false;for(const auto&t:project.tracks)anySolo|=t.solo;
       for(int tr=0;tr<Tracks;tr++)audible[tr]=!project.tracks[tr].mute&&(!anySolo||project.tracks[tr].solo);
-      patches = m.patches;random=m.random;variants=m.variants;appliedSeq=m.seq;
+      patches = m.patches;random=m.random;params=m.params;variants=m.variants;appliedSeq=m.seq;
       for(int tr=0;tr<Tracks;tr++)for(int slot=0;slot<2;slot++)inserts[tr][slot].attachPorted(m.ported[tr*2+slot]);
       for(int tr=0;tr<Tracks;tr++)for(int slot=0;slot<2;slot++){
         auto &insert=inserts[tr][slot];insert.setSettings(project.tracks[tr].inserts[slot]);
@@ -490,6 +609,8 @@ struct Audio::Impl {
         if(!auditionMixActive[tr]&&((m.playing&&!start&&row>=0)||m.endAudition)){
           auto f=resolvedStep(tr).fx[slot],before=insert.setting();
           if(f.type==FxType::Random){if(before.type!=FxType::None)insert.setSettings(insertKeep[tr*2+slot]);}   // (keeps the current draw)
+          else if(f.random&&f.type!=FxType::None&&f.type==before.type){insert.setSettings(insertKeep[tr*2+slot]);if(f.value!=before.value)insert.configure(f,project.bpm);}   // (likewise)
+          else if(f.random&&f.type!=FxType::None)insert.configure(resolveRandom(tr,slot,f),project.bpm);
           else if(f.type!=before.type||f.value!=before.value)insert.configure(f,project.bpm);
         }
         // A stopped settings update must not re-engage a stored granular freeze.
@@ -540,6 +661,7 @@ struct Audio::Impl {
     }
   }
   void renderBlock(AudioStats &stats) {
+    applyPerformance();
     if(playing)for(int tr=0;tr<Tracks;tr++) {
       bool noteDue=false;
       // Advance every due value lane before sampling them for a simultaneous NOTE tick.
@@ -555,7 +677,9 @@ struct Audio::Impl {
     auto &mix=currentMix;auto &leftGain=currentLeft;auto &rightGain=currentRight;
     for(int tr=0;tr<Tracks;tr++) {
       const auto &track=project.tracks[tr];
-      mix[tr]=resolveTrackMix(track,auditionMixActive[tr]?auditionSteps[tr]:resolvedStep(tr));
+      Step at=auditionMixActive[tr]?auditionSteps[tr]:resolvedStep(tr);
+      if(!auditionMixActive[tr])at.locks=noteLocks[tr];   // (the playing note's, not the current row's)
+      mix[tr]=resolveTrackMix(track,at);
       leftGain[tr]=mix[tr].level*std::sqrt((1-mix[tr].pan)*.5f);
       rightGain[tr]=mix[tr].level*std::sqrt((1+mix[tr].pan)*.5f);
     }
@@ -619,6 +743,39 @@ struct Audio::Impl {
 Audio::Audio(size_t n)
     : impl(std::make_unique<Impl>(std::max<size_t>(n, 12))) {for(auto &r:stats.trackRow)r.store(-1); }
 Audio::~Audio() = default;
+void Audio::perform(const PerfFrame &f) {
+  auto &a=*impl;
+  auto &mail=a.perfMail[a.perfBack];mail.frame=f;
+  // Each chain stage's processors are made here, on the producer thread, before the
+  // audio can reach them; they live as long as the audio does.
+  for(int k=0;k<PerfTargets;k++)for(int i=0;i<PerfStages;i++){
+    auto &own=a.perfPorted[k*PerfStages+i];
+    if(f.on&&i<f.stages){int kind=portedIndex(f.effect[i].type);if(kind>=0&&!own[kind])own[kind]=std::make_unique<PortedProcessor>(f.effect[i].type);}
+    for(int kind=0;kind<PortedTypes;kind++)mail.ported[k*PerfStages+i][kind]=own[kind].get();
+  }
+  a.perfBack=a.perfMiddle.exchange(uint8_t(a.perfBack|4),std::memory_order_acq_rel)&3;
+  // Y: recook an instrument only when it changed (a recipe engine: when its variation does).
+  static_assert(PerfParameters>=ENG_NPAR,"room for every engine parameter");
+  bool changed=false;
+  for(int k=0;k<PerfTargets;k++){
+    const auto &want=f.instrument[k];auto &last=a.perfVoiceLast[k];
+    bool same=want.track==last.track&&want.slot==last.slot&&want.engine==last.engine&&want.seed==last.seed&&want.live==last.live&&
+      (want.live?want.params==last.params:want.variation==last.variation);
+    if(same)continue;
+    changed=true;last=want;
+    if(want.track>=0&&want.engine<SynthEngines){
+      int32_t parameters[ENG_NPAR]{};
+      if(want.live)std::copy_n(want.params.begin(),ENG_NPAR,parameters);
+      else amalthea_patch_variant(want.engine,want.seed,want.variation,parameters);
+      engines[want.engine]->cook(a.perfVoiceCooked[k].data,parameters);a.perfVoiceCooked[k].used=engines[want.engine]->ck_size;
+    }
+  }
+  if(changed){
+    auto &m=a.perfVoiceMail[a.perfVoiceBack];m.info=a.perfVoiceLast;
+    for(int k=0;k<PerfTargets;k++)if(m.info[k].track>=0)m.patch[k]=a.perfVoiceCooked[k];
+    a.perfVoiceBack=a.perfVoiceMiddle.exchange(uint8_t(a.perfVoiceBack|4),std::memory_order_acq_rel)&3;
+  }
+}
 bool Audio::submit(const Project &p, bool play,int auditionTrack,const Step *auditionStep,const DeviceSettings *device,bool endAudition,PatternSync sync) {
   auto &a = *impl;
   auto h = a.head.load(std::memory_order_relaxed);
@@ -665,6 +822,32 @@ bool Audio::submit(const Project &p, bool play,int auditionTrack,const Step *aud
       if(kind>=0&&!a.preparedPorted[tr*2+slot][kind])a.preparedPorted[tr*2+slot][kind]=std::make_unique<PortedProcessor>(e.type);
     }
   }
+  // RANDOM cells: one key per (track, slot, effect) in use, the pool shared out between them
+  // and redrawn when the keys or the project seed change.
+  {
+    struct Key{int slot;FxType type;};std::vector<Key> keys;
+    auto consider=[&](int key,const Effect&f){
+      if(!f.random||f.type==FxType::None||f.type==FxType::Random||(device&&!device->insertEnabled(f.type)))return;
+      for(auto&k:keys)if(k.slot==key&&k.type==f.type)return;
+      keys.push_back({key,f.type});
+    };
+    for(int tr=0;tr<Tracks;tr++)for(int slot=0;slot<2;slot++){
+      for(int row=0;row<columnLength(p.tracks[tr],slot+2);row++)consider(tr*2+slot,p.tracks[tr].steps[row].fx[slot]);
+      if(auditionStep&&auditionTrack==tr)consider(tr*2+slot,auditionStep->fx[slot]);
+    }
+    uint32_t seed=p.seed^0x7f4a7c15u;for(auto&k:keys){seed^=uint32_t(k.slot*131+int(k.type));seed*=0x01000193u;}seed|=1u;
+    auto &pool=a.preparedParams;
+    if(keys.empty())pool.count=0;
+    else if(!pool.count||a.preparedParamsSeed!=seed){
+      a.preparedParamsSeed=seed;pool.count=0;
+      const int each=std::max(1,Impl::ParamDraws/int(keys.size()));
+      for(auto&k:keys)for(int d=0;d<each&&pool.count<Impl::ParamDraws;d++){
+        Effect e{k.type,50};InsertSettings cfg=p.tracks[k.slot/2].inserts[k.slot%2];
+        randomizeFxParameters(e,cfg,seed);boundInsertCost(e,cfg);
+        pool.slot[pool.count]=uint8_t(k.slot);pool.type[pool.count]=k.type;pool.settings[pool.count]=cfg;pool.count++;
+      }
+    }
+  }
   if(auditionStep&&auditionTrack>=0&&auditionTrack<Tracks)for(int slot=0;slot<2;slot++){auto type=auditionStep->fx[slot].type;int kind=portedIndex(type);if(kind>=0&&!a.preparedPorted[auditionTrack*2+slot][kind])a.preparedPorted[auditionTrack*2+slot][kind]=std::make_unique<PortedProcessor>(type);}
   a.preparedValid=true;
   // Row variations: cook each varied (slot, variation) once into the pool, reusing a buffer
@@ -701,7 +884,7 @@ bool Audio::submit(const Project &p, bool play,int auditionTrack,const Step *aud
     }
   }
   auto &m=a.messages[h % a.messages.size()];
-  m.project=p; m.playing=play; m.patches=a.prepared;m.random=a.preparedRandom;m.device=device?*device:DeviceSettings{};
+  m.project=p; m.playing=play; m.patches=a.prepared;m.random=a.preparedRandom;m.params=a.preparedParams;m.device=device?*device:DeviceSettings{};
   for(int slot=0;slot<Tracks*2;slot++)for(int kind=0;kind<PortedTypes;kind++)m.ported[slot][kind]=a.preparedPorted[slot][kind].get();
   m.endAudition=endAudition;m.sync=sync;m.variants=table;m.seq=h;
   m.auditionTrack=auditionStep?auditionTrack:-1;if(auditionStep)m.auditionStep=*auditionStep;

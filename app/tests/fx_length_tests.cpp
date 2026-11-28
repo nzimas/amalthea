@@ -18,14 +18,14 @@ int main(int argc,char**argv){
   {
     Editor e;e.project=blankProject();e.column=2;e.row=3;
     e.action(Action::Enter);check(e.eventTabCount()==3&&e.eventTab==0,"FX edit opens on DRY/WET MIX of three tabs");
-    e.action(Action::Right);check(e.pending.fx[0].type!=FxType::None&&e.pending.fx[0].value==DefaultFxMix,"a newly chosen effect starts at 50% wet");
-    e.action(Action::NextTrack);check(e.lengthTab()&&e.track==0,"F2 selects LENGTH");
+    e.action(Action::Up);check(e.pending.fx[0].type!=FxType::None&&e.pending.fx[0].value==DefaultFxMix,"a newly chosen effect starts at 50% wet");
+    e.action(Action::NextTrack);check(e.lengthTab()&&e.track==0&&e.eventField==0,"F2 selects LENGTH");
     e.action(Action::Up);e.action(Action::Up);e.action(Action::Up);
-    e.action(Action::NextTrack);check(e.conditionTab(),"then CONDITION");
-    for(int i=0;i<200;i++){e.eventTab=1;e.action(Action::Up);}check(e.pending.fx[0].length==MaxFxLength,"length is bounded");
+    e.action(Action::NextTrack);check(e.randomTab(),"then RANDOM");e.action(Action::NextTrack);check(e.eventTab==0,"and back to DRY/WET MIX");
+    e.eventTab=1;for(int i=0;i<200;i++)e.action(Action::Up);check(e.pending.fx[0].length==MaxFxLength,"length is bounded");
     for(int i=0;i<MaxFxLength-4;i++)e.action(Action::Down);
     e.action(Action::Enter);check(e.project.tracks[0].steps[3].fx[0].length==4,"Enter commits FX LENGTH");
-    Canvas c(1024,768);AudioStats stats;e.action(Action::Enter);e.eventTab=1;drawUI(c,e,stats);
+    Canvas c(1024,768);AudioStats stats;e.action(Action::Enter);e.eventTab=1;e.eventField=1;drawUI(c,e,stats);
     if(argc>1)writePPM(c,std::string(argv[1])+"/fx-length.ppm");
     e.action(Action::Cancel);
     Project loaded;std::string error;
@@ -91,7 +91,7 @@ int main(int argc,char**argv){
     e.row=2;e.column=0;
     e.action(Action::Shift2Down);e.action(Action::NextTrack);e.action(Action::NextTrack);e.action(Action::Shift2Up);
     check(e.track==0&&e.row==4&&e.selectionFirst()==2&&e.selectionLast()==4,"FUNC+F2 selects down from the cursor");
-    e.action(Action::Enter);e.action(Action::NextTrack);e.action(Action::NextTrack);check(e.conditionTab(),"condition tab");
+    e.action(Action::Enter);e.action(Action::Right);check(e.conditionField(),"the note's CONDITION field");
     e.action(Action::Up);e.action(Action::Up);e.action(Action::Enter);
     auto c=eventCondition(steps[4],0);
     for(int r=2;r<=4;r++)check(eventCondition(steps[r],0).every==c.every&&eventCondition(steps[r],0).occurrence==c.occurrence&&c.every>1,"the condition reaches every selected row");
@@ -110,7 +110,7 @@ int main(int argc,char**argv){
     e.undo();check(steps[5].note==53,"erase over a selection undoes in one step");
     e.action(Action::Cancel);check(!e.erasing,"Cancel leaves erase mode");
     e.row=1;e.column=2;e.action(Action::Shift2Down);e.action(Action::NextTrack);e.action(Action::Shift2Up);
-    e.action(Action::Enter);e.action(Action::Right);e.action(Action::Enter);
+    e.action(Action::Enter);e.action(Action::Up);e.action(Action::Enter);
     check(steps[1].fx[0].type==steps[2].fx[0].type&&steps[1].fx[0].value==DefaultFxMix&&steps[2].fx[0].value==DefaultFxMix,"a chosen effect reaches every selected FX row");
     e.action(Action::Cancel);check(!e.hasSelection(),"Cancel clears the selection");
     e.action(Action::NextTrack);check(e.track==1,"plain F2 still changes track");

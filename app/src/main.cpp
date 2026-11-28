@@ -5,6 +5,7 @@
 #include "core.hpp"
 #include "sessions.hpp"
 #include "ui.hpp"
+#include "performance.hpp"
 #include <SDL.h>
 #include <algorithm>
 #include <chrono>
@@ -132,6 +133,24 @@ static std::optional<Action> key(SDL_Keycode k) {
 }
 #ifdef AMALTHEA_BRICK
 struct Brick {
+  // The F1 / F2 keys' LEDs (the TrimUI LED animation driver). TRACKER: both dimly lit in a
+  // cool tone (they move between tracks); PERFORMANCE: F1 alone, bright yellow (it leaves the
+  // mode); elsewhere (the other appliances, the appliance menu): off.
+  enum class Keys { Off, Tracker, Performance };
+  static void writeLed(const char*name,const char*value){FILE*f=fopen((std::string("/sys/class/led_anim/")+name).c_str(),"w");if(f){fputs(value,f);fclose(f);}}
+  static void led(const char*key,const char*rgb){
+    std::string k(key);
+    if(!rgb){writeLed(("effect_"+k).c_str(),"0");return;}
+    writeLed(("effect_rgb_hex_"+k).c_str(),rgb);writeLed(("effect_cycles_"+k).c_str(),"-1");writeLed(("effect_"+k).c_str(),"4");
+  }
+  Keys keys=Keys::Off;bool keysSet=false;
+  void lightKeys(Keys k){
+    if(keysSet&&k==keys)return;
+    keys=k;keysSet=true;
+    if(k==Keys::Performance){led("f1","FFFF00 ");led("f2",nullptr);}
+    else if(k==Keys::Tracker){led("f1","1E4A6E ");led("f2","1E4A6E ");}
+    else {led("f1",nullptr);led("f2",nullptr);}
+  }
   int fb = -1, input = -1, disp = -1, previousBrightness = -1;
   uint8_t *memory = nullptr;
   fb_fix_screeninfo fix{};
@@ -163,6 +182,7 @@ struct Brick {
   std::string previousGovernor;
   bool governorChanged=false;
   ~Brick() {
+    if(keysSet&&keys!=Keys::Off)lightKeys(Keys::Off);
     if(control) {
       if(previousHeadphone>=0)mixerValue("Headphone Volume",previousHeadphone);
       snd_ctl_close(control);
@@ -275,8 +295,12 @@ struct Brick {
         if(fxMode)audio.stats.fxRenderMaxUs.store(std::max(audio.stats.fxRenderMaxUs.load(),uint64_t(renderUs)));
         // Stereo mix to USB (pre codec volume, like a line output). Never blocks.
         usbOut.push(data,256);
-        for (int i = 0; i < 512; i++)
-          pcmData[i] = int16_t(data[i] * 32767);
+        // The Brick's codec plays its first channel on the jack's right side: the frames go
+        // to it with left and right exchanged, so the jack matches the mix (and USB out).
+        for (int i = 0; i < 256; i++) {
+          pcmData[2 * i] = int16_t(data[2 * i + 1] * 32767);
+          pcmData[2 * i + 1] = int16_t(data[2 * i] * 32767);
+        }
         int pos = 0;
         while (pos < 256 && audioRun) {
           auto n = snd_pcm_writei(pcm, pcmData + pos * 2, 256 - pos);
@@ -576,7 +600,7 @@ int main(int argc, char **argv) {
     if (!lifebloodBank&&a == Action::LoadSession) {
       if(editor.inFx()){
         if(loadFxRack(*editor.fxRack,fxSessionPath(fxBankRoot,editor.fxSessionSlot),err)){
-          editor.fxActiveSession=editor.fxSessionSlot;editor.say("FX SESSION "+std::to_string(editor.fxSessionSlot+1)+" LOADED");
+          editor.fxActiveSession=editor.fxSessionSlot;editor.say("FX RACK SESSION "+std::to_string(editor.fxSessionSlot+1)+" LOADED");
         }else editor.say(err);
         noticeUntil=std::chrono::steady_clock::now()+std::chrono::milliseconds(1400);syncNeeded=true;return;
       }
@@ -628,8 +652,8 @@ int main(int argc, char **argv) {
     }
     if(editor.fxSessionRequest){
       int request=editor.fxSessionRequest;editor.fxSessionRequest=0;
-      if(request==1){if(loadFxRack(*editor.fxRack,fxSessionPath(fxBankRoot,editor.fxSessionSlot),err)){editor.fxActiveSession=editor.fxSessionSlot;editor.say("FX SESSION LOADED");}else editor.say(err);noticeUntil=std::chrono::steady_clock::now()+std::chrono::milliseconds(1400);}
-      else {savingFx=savePending=true;saveSlot=editor.fxSessionSlot;editor.say("SAVING FX SESSION "+std::to_string(saveSlot+1));saveAt=std::chrono::steady_clock::now()+std::chrono::milliseconds(180);noticeUntil=saveAt+std::chrono::seconds(2);}
+      if(request==1){if(loadFxRack(*editor.fxRack,fxSessionPath(fxBankRoot,editor.fxSessionSlot),err)){editor.fxActiveSession=editor.fxSessionSlot;editor.say("FX RACK SESSION LOADED");}else editor.say(err);noticeUntil=std::chrono::steady_clock::now()+std::chrono::milliseconds(1400);}
+      else {savingFx=savePending=true;saveSlot=editor.fxSessionSlot;editor.say("SAVING FX RACK SESSION "+std::to_string(saveSlot+1));saveAt=std::chrono::steady_clock::now()+std::chrono::milliseconds(180);noticeUntil=saveAt+std::chrono::seconds(2);}
     }
     if (editor.effectAnnouncement != oldAnnouncement)
       effectUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(900);
@@ -664,6 +688,25 @@ int main(int argc, char **argv) {
       if(count!=editor.fxVisibleChannels){editor.fxVisibleChannels=count;editor.fxChannel%=count;uiDirty=true;}
     }
     if(editor.splash&&now-start>=std::chrono::milliseconds(1400)){editor.splash=false;uiDirty=true;}
+    // PERFORMANCE: the chain (with its LFOs) to the audio every 20 ms while the mode is on,
+    // and once more as it is left (the chains ring out). F1 is lit while it leaves the mode.
+    {
+      const bool on=editor.page==Page::Performance&&editor.performance;
+      static bool wasOn=false;static auto perfAt=now;static uint64_t perfSerial=0;
+      if(on||wasOn){
+        bool due=now>=perfAt||editor.performanceSerial!=perfSerial||on!=wasOn;
+        if(due&&editor.performance){
+          double dt=std::chrono::duration<double>(now-perfAt).count();if(!(dt>0&&dt<.25))dt=.02;
+          auto frame=perfFrame(*editor.performance,on?dt:0);if(!on)frame.on=false;
+          audio.perform(frame);perfAt=now+std::chrono::milliseconds(20);perfSerial=editor.performanceSerial;
+        }
+      }
+#ifdef AMALTHEA_BRICK
+      brick.lightKeys(on?Brick::Keys::Performance:
+        !editor.splash&&editor.page!=Page::Appliances&&!editor.inAppliance()?Brick::Keys::Tracker:Brick::Keys::Off);
+#endif
+      wasOn=on;
+    }
     if(auto gesture=powerButton.tick(millis());gesture!=Action::Reserved)apply(gesture);
     if(auto gesture=sessionButton.tick(millis());gesture!=Action::Reserved)apply(gesture);
     if(auto gesture=randomizerButton.tick(millis());gesture!=Action::Reserved)apply(gesture);
@@ -813,7 +856,7 @@ int main(int argc, char **argv) {
     }
     if(syncNeeded&&editor.inLifeblood()&&editor.lifeblood){
       auto&s=*editor.lifeblood;
-      if(effects.submit(s.network,s.tempo,s.mix,editor.lbBypass,editor.device)){effects.activate(true);syncNeeded=false;}
+      if(effects.submit(s.network,s.tempo,s.mix,editor.lbBypass,editor.device,s.master)){effects.activate(true);syncNeeded=false;}
     }
     if(syncNeeded&&editor.inFx()&&editor.fxRack){
       if(effects.submit(*editor.fxRack,editor.device)){effects.activate(true);syncNeeded=false;}
@@ -854,7 +897,7 @@ int main(int argc, char **argv) {
       noticeUntil=now+std::chrono::milliseconds(1400);uiDirty=true;
     }
     if (uiDirty ||
-        ((editor.inAppliance()||editor.page==Page::Mixer || (editor.playing && editor.page==Page::Pattern)) && now - lastDraw >= std::chrono::milliseconds(33))) {
+        ((editor.inAppliance()||editor.page==Page::Mixer||editor.page==Page::Performance || (editor.playing && editor.page==Page::Pattern)) && now - lastDraw >= std::chrono::milliseconds(33))) {
       uiDirty = false;
       drawUI(canvas, editor, audio.stats, help);
 #ifdef AMALTHEA_BRICK

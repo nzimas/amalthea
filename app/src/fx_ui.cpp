@@ -7,7 +7,7 @@ void drawFxUI(Canvas&c,const Editor&e,const AudioStats&audio){
  auto box=[&](int x,int y,int w,int h,uint32_t color){c.rect(X(x),X(y),X(w),X(h),color);};
  auto text=[&](int x,int y,int width,const std::string&s,int size,uint32_t color=0xe8edf1){c.textFit(X(x),X(y),X(width),s,X(size),color);};
  constexpr uint32_t accent=0xc4a0ff,dim=0x95a4b6,ink=0x0c1018;static const FxRack empty{};const auto&r=e.fxRack?*e.fxRack:empty;
- drawAmaltheaMark(c,X(24),X(12),X(76),accent,2);text(120,25,340,"AMALTHEA / FX",38);
+ drawAmaltheaMark(c,X(24),X(12),X(76),accent,2);text(120,25,600,"AMALTHEA / FX RACK",38);
  drawBattery(c,X(868),X(32),X(24),e.battery,e.charging,dim);
  int state=audio.usbState.load(),channels=audio.usbChannels.load();
  std::string input=state==0?(audio.usbPort==1?"USB: COMPUTER LINK":audio.usbPort==2?"USB: STARTING HOST":audio.usbPort==3?"USB HOST: WAITING":audio.usbPort==4?"USB: PORT ERROR":"USB: WAITING"):state==1?std::string(fm1Name(audio.usbFirmware))+" / "+std::to_string(channels)+" TRACKS":state==4?std::string(fm1Name(audio.usbFirmware))+" / STEREO MIX":state==2?"USB: FORMAT UNSUPPORTED":state==5?"USB: NO AUDIO INPUT":"USB: OPEN FAILED";
@@ -15,7 +15,7 @@ void drawFxUI(Canvas&c,const Editor&e,const AudioStats&audio){
  bool clock=audio.usbClock.load();std::string clockText=clock?std::string(audio.usbRunning?"EXT ":"EXT STOP ")+std::to_string(int(audio.usbBpm.load()+.5f))+" BPM":std::string(r.running?"INT ":"INT STOP ")+std::to_string(r.tempo)+" BPM";
  text(630,114,370,clockText,30,clock?accent:dim);box(24,169,976,2,0x28313e);
  if(e.page==Page::FxSessions){
-  text(24,187,976,"FX SESSIONS",38,accent);
+  text(24,187,976,"FX RACK SESSIONS",38,accent);
   for(int i=0;i<64;i++){int x=24+(i%8)*122,y=252+(i/8)*58;bool selected=e.fxSessionSlot==i,active=e.fxActiveSession==i;
    box(x,y,112,49,active?0x73b5ff:selected?accent:0x293648);box(x+3,y+3,106,43,selected?0x45305e:0x101822);
    text(x+12,y+7,90,std::to_string(i+1),29,e.fxSessionState[i]?0xf0f4fa:dim);
@@ -23,7 +23,7 @@ void drawFxUI(Canvas&c,const Editor&e,const AudioStats&audio){
   }return;
  }
  if(e.page==Page::FxSessionSettings){
-  text(24,187,976,"FX SESSION "+std::to_string(e.fxSessionSlot+1),38,accent);
+  text(24,187,976,"FX RACK SESSION "+std::to_string(e.fxSessionSlot+1),38,accent);
   const char*name[]={"SESSION TEMPO","LOAD","SAVE"};for(int f=0;f<3;f++){int y=290+f*115;bool selected=e.fxSessionField==f;if(selected)box(24,y-10,976,90,accent);text(48,y,580,name[f],40,selected?ink:dim);if(!f)text(650,y,320,std::to_string(r.tempo)+" BPM",40,selected?ink:0xf0f4fa);}return;
  }
  int ch=std::clamp(e.fxChannel,0,5),slot=std::min(e.fxRow,1),key=ch*2+slot;const auto&s=r.slots[key];

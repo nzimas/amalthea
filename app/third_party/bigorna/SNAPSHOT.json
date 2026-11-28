@@ -1,7 +1,7 @@
 {
   "source_directory": "../mvave-digirust",
   "source_commit": "1e2985922de4fefe30e9dcb46a8fc6f495871bdc",
-  "note": "Working-tree snapshot; native adaptations described in docs/ENGINE-PORTS.md. Hashes identify the ported files.",
+  "note": "Working-tree snapshot; native adaptations described in docs/ENGINE-PORTS.md. Hashes identify the ported files. fx.c (the send effects and the master compressor) is compiled unchanged by src/bigorna_master.c for LIFEBLOOD's mirrored output stage.",
   "files": {
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "dsp.h": "6e2eb08a48e594b4186c8c2507716da52bab429f8814abcf074c25c57ac19a78",
@@ -13,6 +13,8 @@
     "sound.h": "9504e28eef944f8140d0fa79452487b0f2a1264b54d6f5eb09c0816e89411c3d",
     "voice.c": "313b8c1773835507253c1baf725d9e5a0cb2141c33d5b9d634ba36ea982b72a5",
     "voice_lfo.h": "ad1d49ef767a62ffeac408a8c15793ceeefde20fd3a1cac42e59443b2069609c",
-    "wav.c": "51bb468f0c3e81b24f9c42e0fc5f1ab84e1560e4ea643e8de88703951f2430d1"
-  }
+    "wav.c": "51bb468f0c3e81b24f9c42e0fc5f1ab84e1560e4ea643e8de88703951f2430d1",
+    "fx.c": "0750fac4193dd3432582d71313e364ad8bae61ab8ae0ee01ae35fa743aa7b505"
+  },
+  "fx.c_source_commit": "167822a8a4525709dece86e9ade64dee4c8c386c"
 }

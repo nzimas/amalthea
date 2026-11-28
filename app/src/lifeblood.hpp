@@ -7,6 +7,7 @@
 // Node slots keep their index for life, so the audio keeps each node's processor
 // (and its tail) while vessels grow and wither around it.
 #include "core.hpp"
+#include "lifeblood_master.hpp"
 #include <array>
 #include <bitset>
 #include <string>
@@ -17,8 +18,9 @@ constexpr int LifebloodIn=0,LifebloodOut=1,LifebloodFloor=2;
 constexpr bool lifebloodNodeVertex(int v){return v>=2&&v<LifebloodTrackBase;}
 constexpr bool lifebloodInput(int v){return v==LifebloodIn||v>=LifebloodTrackBase;}
 // PATH (after Vascular): ABSTRACT grows textures and spaces; RHYTHMIC grows cuts, gates
-// and permutations, every effect clearly wet.
-enum LifebloodPath : uint8_t { PathAbstract, PathRhythmic, LifebloodPaths };
+// and permutations, every effect clearly wet. ANY (the default) takes either path each
+// time X grows a network. Append only (sessions store the number).
+enum LifebloodPath : uint8_t { PathAbstract, PathRhythmic, PathAny, LifebloodPaths };
 const char *lifebloodPathName(int);
 // CHARACTER: the recipe X grows networks from. ANY draws one of the others each time.
 // CUT: stutters, slicers and repeaters; GATE: rhythmic gates and chops; MAYHEM: cuts into
@@ -27,7 +29,9 @@ enum LifebloodCharacter : uint8_t { CharacterAny, CharacterDrift, CharacterGrit,
  CharacterCut, CharacterGate, CharacterMayhem, CharacterIndustrial, LifebloodCharacters };
 // The RHYTHMIC path's recipes (built around cuts and gates); the rest are ABSTRACT.
 constexpr bool lifebloodRhythmic(int c){return c==CharacterPulse||(c>=CharacterCut&&c<=CharacterIndustrial);}
-constexpr bool lifebloodOnPath(int c,int path){return c>CharacterAny&&c<LifebloodCharacters&&lifebloodRhythmic(c)==(path==PathRhythmic);}
+constexpr bool lifebloodOnPath(int c,int path){return c>CharacterAny&&c<LifebloodCharacters&&(path==PathAny||lifebloodRhythmic(c)==(path==PathRhythmic));}
+// The concrete path a network follows: PATH itself, or under ANY the one its CHARACTER implies.
+constexpr int lifebloodPathFor(int path,int c){return path!=PathAny?path:lifebloodRhythmic(c)?PathRhythmic:PathAbstract;}
 const char *lifebloodCharacterName(int);
 // The families recipes reason about (after Vascular's effect characters).
 enum class LifebloodFamily : uint8_t { Space, Time, Texture, Color, Drive, Motion, Rhythm };
@@ -63,7 +67,7 @@ struct LifebloodNetwork {
 };
 // The blank network: IN straight to OUT, the input passing dry.
 LifebloodNetwork blankLifeblood();
-struct LifebloodRecipe { uint8_t character=CharacterAny,maxNodes=6,path=PathRhythmic,inputs=0,heard=0x3f; };
+struct LifebloodRecipe { uint8_t character=CharacterAny,maxNodes=6,path=PathAny,inputs=0,heard=0x3f; };
 // X: a new network grown from the recipe. Deterministic for a given seed.
 LifebloodNetwork growLifeblood(const LifebloodRecipe&,uint32_t&seed,const DeviceSettings&);
 // A: new vessels between the same nodes (types and parameters kept), after Vascular's
@@ -77,9 +81,9 @@ void lifebloodSetInputs(LifebloodNetwork&,int inputs,uint8_t heard,uint32_t&seed
 // A heard track with no vessel at all passes straight to OUT. True when one was added.
 bool lifebloodConnectHeard(LifebloodNetwork&,uint32_t&seed);
 // Y: new parameters for every node, keeping the types and the connections.
-void reseedLifeblood(LifebloodNetwork&,uint32_t&seed,int path=PathRhythmic);
+void reseedLifeblood(LifebloodNetwork&,uint32_t&seed,int path=PathAny);
 // New parameters for one node, inside its family's bounds.
-void reseedLifebloodNode(LifebloodNetwork&,int slot,uint32_t&seed,int path=PathRhythmic);
+void reseedLifebloodNode(LifebloodNetwork&,int slot,uint32_t&seed,int path=PathAny);
 // Every edge goes up in rank between live vertices, OUT is reachable from IN and
 // every active node lies on a path from IN to OUT.
 bool lifebloodValid(const LifebloodNetwork&);
@@ -94,7 +98,7 @@ struct Angiogenesis {
  bool active=false;
  std::array<float,LifebloodMaxNodes> vx{},vy{};
  std::array<float,LifebloodMaxNodes> wither{};   // > 0: a pruned node fading out
- float timer=0;int startCost=0;uint32_t seed=0x5eed1e55;uint8_t path=PathRhythmic;
+ float timer=0;int startCost=0;uint32_t seed=0x5eed1e55;uint8_t path=PathAny;
  void start(const LifebloodNetwork&);
  // Advance by dt seconds at GROWTH 0..100 (6..120 mutations a minute), never
  // above maxNodes. Returns true when the network changed.
@@ -111,13 +115,16 @@ struct LifebloodSession {
  uint8_t character=CharacterAny;   // recipe X grows from
  uint8_t maxNodes=6;               // 3 .. LifebloodMaxNodes
  uint8_t growth=40;                // angiogenesis speed
- uint8_t mix=100;                  // network wet; the rest is the dry input
- uint8_t path=PathRhythmic;        // ABSTRACT or RHYTHMIC recipes
+ uint8_t mix=50;                   // network wet; the rest is the dry input (half by default)
+ uint8_t path=PathAny;            // ANY, ABSTRACT or RHYTHMIC recipes
  uint32_t seed=0x11feb10d;
+ LifebloodMaster master{};        // COMP and EQ tabs: the mastering stage
  Angiogenesis angiogenesis{};      // runtime only
 };
-// Session settings rows: TEMPO, PATH, CHARACTER, NODES, GROWTH, MIX.
-constexpr int LifebloodSettingsFields=6;
+// Session settings tabs (F1 / F2, two shown at a time): GENERAL (TEMPO, PATH, CHARACTER,
+// NODES, GROWTH, MIX), COMP and EQ.
+constexpr int LifebloodSettingsFields=6,LifebloodSettingsTabs=3;
+int lifebloodSettingsFieldCount(int tab);
 std::string lifebloodPath(const std::string&root,int slot);
 bool saveLifeblood(const LifebloodSession&,const std::string&path,std::string&error);
 bool loadLifeblood(LifebloodSession&,const std::string&path,std::string&error);

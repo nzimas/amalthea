@@ -9,7 +9,7 @@
 #include <vector>
 #include <memory>
 namespace amalthea {
-constexpr int Tracks = 12, MaxRows = 256, Instruments = 12, PatternRows = 16, Columns = 5;
+constexpr int Tracks = 12, MaxRows = 256, Instruments = 15, PatternRows = 16, Columns = 5;
 constexpr int EventConditionBytes=Tracks*MaxRows*(Columns-1)*2;
 constexpr uint8_t NoInstrument = 255;
 constexpr int Directions = 19;
@@ -75,10 +75,21 @@ struct DeviceSettings {
 };
 bool saveDeviceSettings(const DeviceSettings &,const std::string &,std::string &);
 bool loadDeviceSettings(DeviceSettings &,const std::string &,std::string &);
+// A trigger condition: the OCCURRENCE-th of every EVERY cycles of its column (1:1 always).
+struct Condition {
+  uint8_t occurrence = 1, every = 1;
+  bool always() const {return occurrence==1&&every==1;}
+};
 struct Effect {
   FxType type = FxType::None;
   uint8_t value = 0;   // DRY/WET MIX: 0 dry .. 100 fully wet
   uint8_t length = 1;  // LENGTH in FX-column steps (1 .. MaxFxLength); tails then fade out
+  // RANDOM (step editor): each time the step plays (its condition allows it), the chosen
+  // effect gets a newly drawn parameter set; the step's DRY/WET MIX stays as set.
+  bool random = false;
+  // Each FX parameter's own condition, on the FX column's cycle. Not met: LENGTH plays as one
+  // step, RANDOM as NO. (The effect itself, with its DRY/WET MIX, uses the cell's condition.)
+  Condition lengthCondition{}, randomCondition{};
 };
 constexpr int MaxFxLength = 64;
 constexpr uint8_t DefaultFxMix = 50; // a newly chosen effect starts half wet
@@ -90,16 +101,29 @@ inline uint8_t defaultFxMix(FxType t){return t==FxType::Flanger||t==FxType::Phas
 // within ShortTailSeconds of their input going quiet.
 constexpr float RingingTailSeconds=6,ShortTailSeconds=1.5f;
 constexpr bool ringingEffect(FxType t){return t==FxType::Space||t==FxType::Clouds||t==FxType::QDelay||t==FxType::ChowMatrix||t==FxType::Rings;}
-struct Condition {
-  uint8_t occurrence = 1, every = 1;
-};
 // MOD column cell. OFFSET shifts its own row's note; TRANSPOSE shifts every note from its
 // row to the end of the MOD column's cycle (or the next TRANSPOSE), offsets included.
-enum class ModifierType : uint8_t { None, Offset, Transpose };
+// RANDOM redraws up to three of the NOTE column's parameters of its row's note each time
+// it is applied (its condition met). Append only (sessions store the number).
+enum class ModifierType : uint8_t { None, Offset, Transpose, Random };
+constexpr int ModifierTypes = 4;
+// RANDOM targets. ANY (first target only) draws one of the parameters each time and leaves
+// the other two targets unused; otherwise every chosen target is drawn. NOTE draws a note
+// of the session scale and root note within an octave of the row's note. Stored numbers.
+enum RandomTarget : uint8_t { TargetNone, TargetAny, TargetNote, TargetLength, TargetLock, RandomTargets = TargetLock + NoteParameters };
+constexpr int ModifierTargets = 3;
+const char *randomTargetName(int);
 struct Modifier {
   int8_t semitones = 0;
   ModifierType type = ModifierType::None;
+  std::array<uint8_t,ModifierTargets> targets{{TargetAny,TargetNone,TargetNone}};
 };
+constexpr bool validTargets(const std::array<uint8_t,ModifierTargets> &t){
+  if(t[0]==TargetNone||t[0]>=RandomTargets)return false;
+  for(int i=1;i<ModifierTargets;i++){if(t[i]>=RandomTargets||t[i]==TargetAny)return false;if(t[0]==TargetAny&&t[i]!=TargetNone)return false;
+    for(int j=0;j<i;j++)if(t[i]!=TargetNone&&t[i]==t[j])return false;}
+  return true;
+}
 struct Step {
   int16_t note = -1;
   uint8_t instrument = NoInstrument;
@@ -110,6 +134,11 @@ struct Step {
   std::array<uint8_t,NoteParameters> locks{{Inherit,Inherit,Inherit,Inherit,Inherit,Inherit,Inherit}};
   // NOTE LENGTH in steps (1 .. 64). Reaching the next note makes a click-free legato into it.
   uint8_t length = 1;
+  // Each NOTE parameter's own condition, on the NOTE column's cycle, independent of the
+  // others (the note itself uses `condition`). Not met: LENGTH plays as one step, a lock
+  // as the track's value.
+  Condition lengthCondition{};
+  std::array<Condition,NoteParameters> lockConditions{};
   // INSTRUMENT column: a per-row variation of the row's instrument sound (0: the patch as
   // it is). The seed redraws the patch's non-pitch parameters; pitch and tuning never change.
   uint32_t variation = 0;
@@ -144,10 +173,11 @@ struct Track {
 };
 constexpr int MasterModules = 11, MasterParameters = 4;
 // Instrument slots retain their identity while the contained engine patch changes.
-constexpr int SynthEngines = 12;
-constexpr int FmDrumEngine = 11;
-// Vascular / Noisferatu engines run in their own native voice storage.
-constexpr bool nativeEngine(int e){return e>=6&&e<=10;}
+constexpr int SynthEngines = 15;
+constexpr int FmDrumEngine = 11, ObradorEngine = 12, RingsEngine = 13, PlaitsEngine = 14;
+// Vascular / Noisferatu engines, and the Mutable Instruments RINGS and PLAITS, run in their own
+// native voice storage: one running instrument per track / slot / patch, retriggered by its notes.
+constexpr bool nativeEngine(int e){return (e>=6&&e<=10)||e==RingsEngine||e==PlaitsEngine;}
 struct InstrumentPatch {
   uint8_t engine = 0;
   uint32_t seed = 0; // zero keeps the engine's original default patch
@@ -169,7 +199,7 @@ struct MasterSettings {
   uint8_t value(int module,int parameter) const { if(macroIndex(module)>=0)return macros[macroIndex(module)].value[parameter];if(module==7&&parameter>=5)return sidechain[parameter-5];return module>=7&&parameter==(module==9?8:4) ? busMix[module-7] : module==9&&parameter>=4 ? reverbSpace[parameter-4] : parameter ? extra[module][parameter-1] : amount[module]; }
 };
 enum class Page { Pattern, Session, Master, Track, Randomizer, Sessions, Column, Macro, Patterns, PatternSettings, Mixer, Dashboard, GlobalInserts, Device, Appliances, FxAppliance, FxSequencer, FxParameters, FxPreferences, FxSessions, FxSessionSettings, FxRandomizer,
-  LifebloodField, LifebloodNode, LifebloodSnapshots, LifebloodSessions, LifebloodSettings };
+  LifebloodField, LifebloodNode, LifebloodSnapshots, LifebloodSessions, LifebloodSettings, Performance };
 struct Project {
   uint32_t seed = 0x414d414c;
   uint16_t bpm = 120, length = PatternRows;
@@ -250,6 +280,7 @@ struct PatternSlot { std::shared_ptr<const Project> state; PatternOverrides over
 struct UndoState { Project project; MusicalSettings sessionDefaults; PatternOverrides overrides; DensitySettings density; };
 bool trackAudible(const Project &,int);
 struct FxRack;
+struct Performance;
 struct LifebloodSession;
 struct Editor {
   Project project{};
@@ -257,6 +288,10 @@ struct Editor {
   int dashboardItem=0,globalInsertItem=0;
   int applianceItem=0;
   std::shared_ptr<FxRack> fxRack;
+  // PERFORMANCE mode (tracker, Y; F1 leaves): temporary, never written into the project
+  // (performance.hpp). The serial changes with every press, for the audio and the screen.
+  std::shared_ptr<Performance> performance;uint64_t performanceSerial=0;
+  void enterPerformance();void leavePerformance();void performanceAction(Action);
   int fxVisibleChannels=6;
   int fxChannel=0,fxRow=0,fxStep=0,fxParameter=0,fxPage=0,fxPreference=0;
   bool fxLevelEdit=false,fxDefaultEdit=false;int fxRandomizerField=0;
@@ -266,7 +301,7 @@ struct Editor {
   void fxAction(Action);
   // LIFEBLOOD appliance (lifeblood_editor.cpp). lbVertex: selected vertex (0 IN, 1 OUT, 2+ nodes).
   std::shared_ptr<LifebloodSession> lifeblood;
-  int lbVertex=0,lbParameter=0,lbPage=0,lbSnapshotSlot=0,lbSessionSlot=0,lbActiveSession=-1,lbSettingsField=0;
+  int lbVertex=0,lbParameter=0,lbPage=0,lbSnapshotSlot=0,lbSessionSlot=0,lbActiveSession=-1,lbSettingsField=0,lbSettingsTab=0;
   // Requests the main loop carries out: 1 load / 2 save the selected session; 3 persist after a snapshot store.
   int lbSessionRequest=0;
   std::array<uint8_t,64> lbSessionState{};
@@ -388,12 +423,25 @@ struct Editor {
   Project previewProject() const;
   Step previewStep() const;
   // Event tabs. NOTE: VALUE, LENGTH, CONDITION, then its locks (PAN, VOLUME, sends).
-  // FX: DRY/WET MIX, LENGTH, CONDITION. INST / MOD: VALUE, CONDITION.
+  // FX: DRY/WET MIX, LENGTH, RANDOM. INST / MOD: VALUE.
+  // Every tab holds its value field(s) and then the parameter's own CONDITION: FX DRY/WET MIX
+  // holds EFFECT and DRY/WET, MOD holds TYPE and SEMITONES, every other tab one VALUE. LEFT /
+  // RIGHT select a field, UP / DOWN change it, START commits the step, A cancels it.
   bool fxColumn() const {return column==2||column==3;}
-  int eventTabCount() const {return column==0?3+NoteParameters:fxColumn()?3:2;}
+  // MOD: TYPE / SEMITONES, and for a RANDOM cell its TARGETS (three targets, then CONDITION;
+  // the second and third are greyed out and skipped while the first is ANY).
+  int eventTabCount() const {return column==0?2+NoteParameters:fxColumn()?3:column==4&&pending.modifier.type==ModifierType::Random?2:1;}
+  int fieldCount() const {return targetsTab()?ModifierTargets+1:(fxColumn()&&eventTab==0)||column==4?3:2;}
+  bool targetsTab() const {return column==4&&eventTab==1;}
+  bool targetGreyed(int field) const {return targetsTab()&&field>0&&field<ModifierTargets&&pending.modifier.targets[0]==TargetAny;}
+  // A field LEFT / RIGHT skip: the greyed targets, and a RANDOM cell's SEMITONES.
+  bool fieldGreyed(int field) const {return targetGreyed(field)||(column==4&&eventTab==0&&field==1&&pending.modifier.type==ModifierType::Random);}
+  bool randomTab() const {return fxColumn()&&eventTab==2;}
   bool lengthTab() const {return (column==0||fxColumn())&&eventTab==1;}
-  bool conditionTab() const {return eventTab==(column==0||fxColumn()?2:1);}
-  int lockTab() const {return column==0&&eventTab>=3?eventTab-3:-1;}
+  bool conditionField() const {return eventField==fieldCount()-1;}
+  int lockTab() const {return column==0&&eventTab>=2?eventTab-2:-1;}
+  int eventField=0;          // the selected field: value field(s), then CONDITION
+  void closeEdit();
   void action(Action);
   // Back (L2) returns to the previous page. History stays inside the current
   // appliance: entering or leaving one clears it, so Back never exits an appliance.
@@ -485,7 +533,16 @@ int cycleConditionIndex(Condition);
 bool conditionMatches(Condition, uint64_t cycle);
 Condition &eventCondition(Step &,int column);
 Condition eventCondition(const Step &,int column);
+// The condition of one parameter (step editor tab) of a cell.
+Condition &parameterCondition(Step &,int column,int tab);
+Condition parameterCondition(const Step &,int column,int tab);
+// The effect an FX cell plays on its column's cycle: nothing if the cell's condition is not met,
+// and LENGTH / RANDOM at their defaults where their own conditions are not met.
+Effect playedEffect(const Step &,int slot,uint64_t cycle);
 int triggeredNote(const Step &, uint64_t cycle, int transpose = 0);
+// A RANDOM MOD cell applied to the note it plays with: draws its targets into `note`
+// (already transposed and offset), `step.length` and `step.locks`.
+void applyRandomModifier(const Modifier &, Step &step, int &note, const Project &, uint32_t &seed);
 const char *instrumentName(int);
 const char *patchFamily(const InstrumentPatch &);
 const char *masterName(int);

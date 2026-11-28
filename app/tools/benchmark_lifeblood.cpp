@@ -1,10 +1,12 @@
 // LIFEBLOOD CPU: each insert alone, then many grown networks including their
-// crossfades, against the 5805 us deadline of a 256-frame block.
+// crossfades, against the 5805 us deadline of a 256-frame block. With "master": only the
+// mastering stage (EQ and compressor, every band in use).
 #include "fx_audio.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 using namespace amalthea;
 static long long frame=0;
@@ -13,7 +15,15 @@ static void block(FxAudio&a,std::vector<long long>*time){
  a.feed(in,256,1,44100);auto t=std::chrono::steady_clock::now();a.render(out,256);
  if(time)time->push_back(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-t).count());
 }
-int main(){
+int main(int argc,char**argv){
+ if(argc>1&&!strcmp(argv[1],"master")){
+  LifebloodMaster m;applyCompProfile(m,CompGlue);applyEqProfile(m,EqPowerNoise);m.compOn=m.eqOn=1;for(auto&b:m.band)if(!b)b=1;
+  LifebloodMasterDsp d;d.set(m);d.reset();std::vector<float>x(512);std::vector<long long> t;uint32_t seed=7;
+  for(int i=0;i<4000;i++){for(auto&v:x)v=((randomNext(seed)>>8)*(1.f/8388608.f)-1)*.7f;auto a=std::chrono::steady_clock::now();d.process(x.data(),256);
+   t.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-a).count());}
+  std::sort(t.begin(),t.end());printf("mastering (10 bands + compressor, AUTO release, SC filter): median %lld us, p99 %lld us per 256 frames; deadline 5805 us\n",t[t.size()/2]/1000,t[t.size()*99/100]/1000);
+  return 0;
+ }
  DeviceSettings device;uint32_t generation=1;
  // One engine for the whole run: on the Brick, destroying it restores the USB role.
  AudioStats stats;FxAudio audio(stats);stats.usbState=4;

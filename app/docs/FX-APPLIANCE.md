@@ -1,11 +1,11 @@
-# Amalthea FX — 0.21.3
+# Amalthea FX RACK — 0.21.3
 
 For the current laptop monitoring baseline, source clock measurements and corrected
 packet diagnostic status, see [the 22 November investigation](USB-MONITOR-INVESTIGATION.md).
 Historical channel-1 comparisons below preceded the owner's instruction to use
 track 4; both current diagnostic executables now use channel 4.
 
-Choose FX on appliance home and press Enter. Startup is blank and stopped; no
+Choose FX RACK on appliance home and press Enter. Startup is blank and stopped; no
 session is automatically recalled. The phase iris represents six shared signal
 paths around a common core. UI typography is Oxanium SemiBold (SIL OFL), from
 Google Fonts; editable identity vectors are in assets/identity.
@@ -16,7 +16,7 @@ Google Fonts; editable identity vectors are in assets/identity.
   editor, toggles level editing, or toggles channel bypass.
 - BYPASS (foot of each strip): skips both slots and passes the channel dry at its
   level, with a 10 ms crossfade. Slot sequencers keep running so re-enabling stays
-  in phase. Bypass state is stored in FX sessions (AFXR4; older files load enabled).
+  in phase. Bypass state is stored in FX RACK sessions (AFXR4; older files load enabled).
 - Hold X on FX1/FX2: choose a new effect type for the selected slot only and
   randomize its parameters. The other slot is untouched.
 - Shift + hold X on FX1/FX2: retain the selected slot's type and randomize only its
@@ -37,8 +37,8 @@ Google Fonts; editable identity vectors are in assets/identity.
 - A in the sequencer: length, clock division, TEMPO, direction and sequencer enable.
   TEMPO is per slot under internal clock: SESSION follows the session tempo, or
   30–300 BPM. External MIDI clock overrides it.
-- L2: Back to the previous page (or out of level edit). R2: return to FX mixer.
-  Middle button: FX sessions.
+- L2: Back to the previous page (or out of level edit). R2: return to FX RACK mixer.
+  Middle button: FX RACK sessions.
 - Sessions: cross selects one of 64 slots; middle tap loads, middle hold saves.
   Enter opens tempo, Load and Save controls. Loaded slot has a blue marker.
 - Play toggles internal transport. External MIDI transport has priority while locked.
@@ -48,7 +48,7 @@ Each slot has its own length, clock and direction. Step locks override its defau
 unlocked parameters inherit. Steps without a trigger use the slot defaults.
 Stopping transport also returns to defaults while audio processing and tails continue.
 The playhead lights the currently sounding step across the two rows independently
-of the navigation cursor. Disable sequencing for a continuous insert. Track and FX session banks are separate.
+of the navigation cursor. Disable sequencing for a continuous insert. Track and FX RACK session banks are separate.
 
 ### Random draws and CPU (build 29)
 
@@ -62,16 +62,16 @@ default delay type. Twelve slots of such draws measured 3858 us p99, 5464 us wor
 ## Clock and USB routing
 
 Incoming MIDI F8 establishes tempo; Start/Continue/Stop control transport. Without
-clock for 750 ms, sequencing uses the FX session tempo and internal Play state.
+clock for 750 ms, sequencing uses the FX RACK session tempo and internal Play state.
 Per-slot divisions remain relative to whichever source is active. Tempo is saved
-with an explicit FX session save; loading starts stopped.
+with an explicit FX RACK session save; loading starts stopped.
 
-Open FX before swapping the single cable. While the laptop is attached, the screen
+Open FX RACK before swapping the single cable. While the laptop is attached, the screen
 shows USB: UNPLUG LAPTOP. After a stable three-second disconnection, the bottom
 port switches automatically to host mode and supplies power. Connect the FM1 after
-five seconds. There is no trial timeout. To reconnect the laptop, exit FX through
+five seconds. There is no trial timeout. To reconnect the laptop, exit FX RACK through
 FUNC then Shift, confirm exit and answer the save prompt; the appliance dashboard
-restores device mode. R2 returns to the FX mixer and does not exit the appliance.
+restores device mode. R2 returns to the FX RACK mixer and does not exit the appliance.
 A supervisor restart also recovers a host role owned by a dead appliance process.
 
 The installed Brick kernel already has USB audio host and raw MIDI support. The
@@ -116,14 +116,14 @@ that every twelve-effect combination can run without underruns.
 
 Capture runs at FIFO priority 13, ahead of codec playback (12) and DSP workers
 (11). The capture buffer request is 64 ms and codec playback stays at its stable
-80 ms setting across appliance transitions; switching FX no longer drops and
+80 ms setting across appliance transitions; switching FX RACK no longer drops and
 reconfigures that PCM. The ring waits for 1536 input frames before starting,
 then uses a slow, bounded drift correction around a 1792-frame target. Recovery
 ramps avoid a hard edge on starvation/re-prime. More buffering adds monitoring
 latency; this pass prioritizes continuity over minimum latency.
 
 `/tmp/amalthea-audio-health` reports captured frames, capture xruns, ring overflow,
-input starvation, maximum capture gap, output xruns and maximum FX render time.
+input starvation, maximum capture gap, output xruns and maximum FX RACK render time.
 The passive logger retains these with USB evidence. An unplug can produce a final
 capture-recovery error, so assess counter increases while the source is connected.
 Synthetic 35 ms delivery bursts remain continuous without starvation or overflow.
@@ -134,7 +134,7 @@ Physical clean-audio confirmation after this change remains an owner test.
 The owner's 0.21.2 test still crackled. While connected, the retained snapshot
 showed 2,973,212 captured frames, zero capture xruns, zero input starvation, zero
 ring overflow, zero output xruns, 1652 frames of input fill and a 177 us maximum
-FX render time. The later one capture recovery/starvation coincides with removal.
+FX RACK render time. The later one capture recovery/starvation coincides with removal.
 These measurements do not support buffer starvation or DSP overload during this test.
 
 For this investigation only, create `/tmp/amalthea-audio-probe.enabled` before an
@@ -192,7 +192,7 @@ Keep Bigorna's sequencer stopped and its patch unchanged for both host tests.
 appliance dashboard remains visible. It allows ten minutes for laptop removal,
 then ten minutes for Bigorna detection. After the eight-second test (or a handled
 error), it restores USB device mode and the original port power. It refuses to
-start while FX owns the role. Results go to `logs/audio/comparison/`; reconnect
+start while FX RACK owns the role. Results go to `logs/audio/comparison/`; reconnect
 the laptop afterward to retrieve them. The runner must be explicitly armed;
 normal startup and appliance operation are unchanged. Hardware verification is
 pending; this diagnostic is not a crackling fix.
@@ -241,7 +241,7 @@ It does not bypass the OHCI host controller, so corrupted USBFS payloads would
 still require host/controller versus device investigation.
 
 Run the same explicit cable-swap runner with the `packets` argument for this
-mode; the original ALSA WAV is preserved. Do not open FX during either test.
+mode; the original ALSA WAV is preserved. Do not open FX RACK during either test.
 The underlying [USBFS ABI](https://github.com/torvalds/linux/blob/v4.9/include/uapi/linux/usbdevice_fs.h)
 and [Linux USB audio capture implementation](https://github.com/torvalds/linux/blob/v4.9/sound/usb/pcm.c)
 are the primary references. Packet-mode hardware verification is pending.

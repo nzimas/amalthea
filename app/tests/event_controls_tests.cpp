@@ -16,17 +16,19 @@ int main(){
  for(auto f:selectableEffects())check(f==FxType::None||f==FxType::Random||std::find(globalInsertTypes().begin(),globalInsertTypes().end(),f)!=globalInsertTypes().end(),"FX catalog contains only active inserts");
  for(auto f:{FxType::Pan,FxType::Volume,FxType::Delay,FxType::Reverb,FxType::Abrasion,FxType::Corrosion,FxType::Modulation,FxType::Diode,FxType::Rat,FxType::Lowpass,FxType::Highpass})check(std::find(selectableEffects().begin(),selectableEffects().end(),f)==selectableEffects().end(),"sends and retired processors absent from FX selection");
  Editor e;e.project=blankProject();e.project.patches[0].engine=2;e.project.master.busMix.fill(0);auto original=encodeProject(e.project);e.action(Action::Enter);auto dry=preview(e);check(energy(dry)>0,"note preview audible");
- AudioStats stats;for(int tab=0;tab<10;tab++){
+ {auto serial=e.auditionSerial;e.action(Action::Up);check(e.auditionSerial==serial+1,"scrolling the note itself sounds it");e.action(Action::Down);}
+ AudioStats stats;for(int tab=0;tab<9;tab++){
   check(e.eventTab==tab,"F2 reaches every note tab without changing track");
   for(int width:{640,1024}){Canvas c(width,width*3/4);drawUI(c,e,stats);for(auto pixel:c.pixels)check(pixel>>24==255,"two-tab window remains bounded and opaque");}
-  if(tab==1){e.action(Action::Up);check(e.pending.length==2,"LENGTH steps up");for(int n=0;n<80;n++)e.action(Action::Up);check(e.pending.length==MaxNoteLength,"LENGTH capped");for(int n=0;n<80;n++)e.action(Action::Down);check(e.pending.length==1,"LENGTH floor is one step");}
-  if(tab>=3){auto serial=e.auditionSerial;e.action(Action::Up);check(e.auditionSerial>serial,"each note parameter requests immediate audition");check(e.pending.locks[tab-3]<=100,"note override percentage");e.action(Action::Left);check(e.pending.locks[tab-3]==Inherit,"left restores track inheritance");}
+  if(tab==1){auto serial=e.auditionSerial;e.action(Action::Up);check(e.pending.length==2&&e.auditionSerial==serial,"LENGTH steps up silently");for(int n=0;n<80;n++)e.action(Action::Up);check(e.pending.length==MaxNoteLength,"LENGTH capped");for(int n=0;n<80;n++)e.action(Action::Down);check(e.pending.length==1,"LENGTH floor is one step");}
+  if(tab>=2){auto serial=e.auditionSerial;e.action(Action::Up);check(e.auditionSerial==serial,"scrolling a note parameter does not sound the note");check(e.pending.locks[tab-2]==noteParameterDefault(e.project.tracks[0],tab-2),"UP from TRACK starts at the track's value");
+   for(int n=0;n<120;n++)e.action(Action::Down);check(e.pending.locks[tab-2]==Inherit,"DOWN past 0 returns to TRACK");e.action(Action::Down);check(e.pending.locks[tab-2]==Inherit,"and stays there");}
   e.action(Action::NextTrack);
  }
  check(e.eventTab==0&&encodeProject(e.project)==original,"tab wrap and previews never commit");
  e.eventTab=2;e.pending.locks[NotePan]=0;auto left=preview(e);check(energy(left,0)>0&&energy(left,1)==0,"pan override heard before commit");e.pending.locks[NotePan]=100;auto right=preview(e);check(energy(right,1)>0&&energy(right,0)==0,"opposite pan audible before commit");
- e.pending.locks[NotePan]=Inherit;e.pending.locks[NoteVolume]=0;check(energy(preview(e))==0,"explicit zero volume differs from inheritance");e.action(Action::Cancel);check(encodeProject(e.project)==original,"cancel discards all preview locks");
- e.column=2;e.action(Action::Enter);e.action(Action::Right);e.pending.fx[0].value=80;auto fx=preview(e);e.pending.fx[0]={};check(energy(fx)>0&&fx!=preview(e),"uncommitted FX event audibly transforms its preview");e.action(Action::Cancel);check(encodeProject(e.project)==original,"FX cancellation preserves session");
+ e.pending.locks[NotePan]=Inherit;e.pending.locks[NoteVolume]=0;check(energy(preview(e))==0,"explicit zero volume differs from inheritance");e.action(Action::Home);check(encodeProject(e.project)==original,"HOME discards all preview locks");
+ e.column=2;e.action(Action::Enter);e.action(Action::Up);e.pending.fx[0].value=80;auto fx=preview(e);e.pending.fx[0]={};check(energy(fx)>0&&fx!=preview(e),"uncommitted FX event audibly transforms its preview");e.action(Action::Cancel);check(encodeProject(e.project)==original,"FX cancellation preserves session");
  // Each new send lock reaches its real bus, and explicit zero defeats a track send.
  e.column=0;e.action(Action::Enter);e.project.master.busMix.fill(100);auto reference=preview(e);
  for(int parameter=NoteDelay;parameter<NoteParameters;parameter++){
@@ -37,12 +39,12 @@ int main(){
  }
  e.pending.locks.fill(Inherit);e.project.tracks[0].reverbSend=100;e.pending.locks[NoteReverb]=0;
  check(resolveTrackMix(e.project.tracks[0],e.pending).reverb==0,"zero note send overrides nonzero track send");
- e.project.tracks[0].reverbSend=0;e.project.master.busMix.fill(0);e.action(Action::Cancel);
+ e.project.tracks[0].reverbSend=0;e.project.master.busMix.fill(0);e.action(Action::Home);
  // Audition and transient playback preserve musical clock progress.
  Audio live(12);live.submit(e.project,true);float scratch[1024]{};live.render(scratch,512);auto advances=live.stats.advances[0].load();
  e.action(Action::Enter);e.action(Action::Up);auto transient=e.previewProject();auto audition=e.previewStep();live.submit(transient,true,e.track,&audition);live.render(scratch,512);
  check(live.stats.auditions==1&&live.stats.advances[0]>=advances,"live edit auditions without restarting transport");
- e.action(Action::Cancel);live.submit(e.project,true,-1,nullptr,nullptr,true);live.render(scratch,512);check(encodeProject(e.project)==original,"cancel after live edit restores stored pattern");
+ e.action(Action::Home);live.submit(e.project,true,-1,nullptr,nullptr,true);live.render(scratch,512);check(encodeProject(e.project)==original,"cancel after live edit restores stored pattern");
  // All note fields are in the same pattern snapshot/undo transaction.
  e.column=0;e.action(Action::Enter);for(int p=0;p<NoteParameters;p++)e.pending.locks[p]=10+p*13;e.action(Action::Enter);e.project.tracks[0].inserts[1].filter={40,12,98,65,60};Project loaded;std::string error;check(decodeProject(loaded,encodeProject(e.project),error)&&encodeProject(loaded)==encodeProject(e.project),"AMAL16 note locks and filter profile roundtrip");
  check(e.savePattern(0),"synthetic pattern captures locks");e.project.tracks[0].steps[0].locks.fill(Inherit);check(e.loadPattern(0)&&e.project.tracks[0].steps[0].locks[0]==10,"pattern restores note automation");

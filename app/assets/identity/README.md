@@ -7,7 +7,7 @@ crescent (Amalthea is also Jupiter's red moon), pouring from its ember mouth a f
 of uneven rays, a burst of plenty that is also a spectrum. The system offers plenty.
 
 Appliances are identified by what they do: Tracker by a stylised pattern screen
-(hex columns with a highlighted cursor row), FX by a pedalboard of three stomp
+(hex columns with a highlighted cursor row), FX RACK by a pedalboard of three stomp
 boxes joined by patch cables. Mint and violet distinguish them on the home screen;
 the Tracker top bar draws its icon in the current track colour.
 

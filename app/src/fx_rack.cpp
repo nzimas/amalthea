@@ -144,6 +144,23 @@ bool MidiTrackPan::byte(uint8_t b){
  pan[channel]=int8_t(b);return true;
 }
 float midiPanPosition(int v){return std::clamp(.5f+.5f*(v-64)/63.f,0.f,1.f);}
+bool MidiFxMirror::byte(uint8_t b){
+ if(b>=0xf8)return false;                      // real time may come inside a SysEx
+ if(b==0xf0){in=true;n=0;buf[n++]=b;return false;}
+ if(!in)return false;
+ if(b!=0xf7&&b>=0x80){in=false;return false;}  // another status ends it, unfinished
+ if(n<int(buf.size()))buf[n++]=b;else{in=false;return false;}
+ if(b!=0xf7)return false;
+ in=false;
+ if(n<7||buf[1]!=0x7d||buf[2]!=0x46||buf[3]!=0x42)return false;
+ auto v14=[&](int at){return int(buf[at])<<7|int(buf[at+1]);};
+ Fm1FxMessage m;m.kind=buf[4];
+ if(m.kind==1&&n==39&&buf[5]==1){for(int k=0;k<30;k++)m.fx[k]=buf[6+k];m.bpm10=v14(36);}
+ else if(m.kind==2&&n==42){for(int k=0;k<18;k++){int v=v14(5+2*k);m.sends[k]=v>=16383?32768:v*2;}}
+ else if(m.kind==3&&n==12){for(int k=0;k<3;k++){int v=v14(5+2*k);m.duck[k]=v>=16383?65536:v*4;}}
+ else return false;
+ msg=m;return true;
+}
 const char*fm1Name(int f){static const char*n[]={"FM1","BIGORNA","TONITOR","NORILSK","LILLIPUT"};return n[std::clamp(f,0,4)];}
 int fm1Firmware(const std::string&s){std::string v=s;for(auto&c:v)c=std::tolower(static_cast<unsigned char>(c));if(v.find("bigorna")!=v.npos)return 1;if(v.find("tonitor")!=v.npos)return 2;if(v.find("norilsk")!=v.npos)return 3;if(v.find("lilliput")!=v.npos||v.find("liliput")!=v.npos)return 4;return 0;}
 UsbMapping fm1Mapping(int firmware,int channels){if(channels==2)return {1,0,true};if(channels==3)return {3,0,false};if(channels==6)return {6,0,false};if(channels==8&&(firmware==1||firmware==2||firmware==4))return {6,2,false};return {};}
@@ -241,20 +258,20 @@ bool saveFxRack(const FxRack&r,const std::string&path,std::string&error){
  for(auto&s:r.slots){put(s.length,1);put(s.clock,1);put(s.direction,1);put(s.sequenced,1);put(s.density,1);for(auto&step:s.steps){put(step.enabled,1);for(int byte=0;byte<16;byte++){int v=0;for(int bit=0;bit<8;bit++)v|=int(step.locks[byte*8+bit])<<bit;put(v,1);}for(auto v:step.values)put(v,1);}}
  for(auto v:r.bypass)put(v,1);
  for(auto&s:r.slots){put(s.complexity,1);put(s.tempo,2);}
- put(rackCrc(b,b.size()),4);std::error_code ec;auto dir=std::filesystem::path(path).parent_path();if(!dir.empty())std::filesystem::create_directories(dir,ec);if(ec){error="CANNOT CREATE FX BANK";return false;}auto tmp=path+".tmp";FILE*f=fopen(tmp.c_str(),"wb");if(!f){error="CANNOT OPEN FX SESSION";return false;}bool ok=fwrite(b.data(),1,b.size(),f)==b.size()&&fflush(f)==0&&fsync(fileno(f))==0;if(fclose(f))ok=false;if(ok)ok=rename(tmp.c_str(),path.c_str())==0;if(!ok){remove(tmp.c_str());error="FX SAVE FAILED";}return ok;
+ put(rackCrc(b,b.size()),4);std::error_code ec;auto dir=std::filesystem::path(path).parent_path();if(!dir.empty())std::filesystem::create_directories(dir,ec);if(ec){error="CANNOT CREATE FX RACK BANK";return false;}auto tmp=path+".tmp";FILE*f=fopen(tmp.c_str(),"wb");if(!f){error="CANNOT OPEN FX RACK SESSION";return false;}bool ok=fwrite(b.data(),1,b.size(),f)==b.size()&&fflush(f)==0&&fsync(fileno(f))==0;if(fclose(f))ok=false;if(ok)ok=rename(tmp.c_str(),path.c_str())==0;if(!ok){remove(tmp.c_str());error="FX RACK SAVE FAILED";}return ok;
 }
 bool loadFxRack(FxRack&out,const std::string&path,std::string&error){
- std::ifstream f(path,std::ios::binary);if(!f){error="NO FX SESSION";return false;}f.seekg(0,std::ios::end);auto size=f.tellg();if(size<13||size>300000){error="INVALID FX SIZE";return false;}f.seekg(0);std::vector<uint8_t>b(size);if(!f.read(reinterpret_cast<char*>(b.data()),size))return false;
+ std::ifstream f(path,std::ios::binary);if(!f){error="NO FX RACK SESSION";return false;}f.seekg(0,std::ios::end);auto size=f.tellg();if(size<13||size>300000){error="INVALID FX RACK SIZE";return false;}f.seekg(0);std::vector<uint8_t>b(size);if(!f.read(reinterpret_cast<char*>(b.data()),size))return false;
  size_t at=5;bool ok=true;auto get=[&](int n){uint32_t v=0;for(int i=0;i<n;i++){if(at>=b.size()){ok=false;return v;}v|=uint32_t(b[at++])<<(i*8);}return v;};
- if(std::string(b.begin(),b.begin()+4)!="AFXR"||(b[4]<1||b[4]>5)){error="INVALID FX HEADER";return false;}
- auto n=get(4);if(n>200000||n>b.size()-at){error="INVALID FX PROFILE";return false;}Project p;std::vector<uint8_t>project(b.begin()+at,b.begin()+at+n);at+=n;if(!decodeProject(p,project,error))return false;
+ if(std::string(b.begin(),b.begin()+4)!="AFXR"||(b[4]<1||b[4]>5)){error="INVALID FX RACK HEADER";return false;}
+ auto n=get(4);if(n>200000||n>b.size()-at){error="INVALID FX RACK PROFILE";return false;}Project p;std::vector<uint8_t>project(b.begin()+at,b.begin()+at+n);at+=n;if(!decodeProject(p,project,error))return false;
  FxRack r;if(b[4]>=2)r.tempo=get(2);ok&=r.tempo>=30&&r.tempo<=300;r.seed=get(4);for(auto&v:r.levels){v=get(1);ok&=v<=100;}
  for(int k=0;k<12;k++){auto&s=r.slots[k];s.effect=p.tracks[k/2].steps[0].fx[k%2];s.settings=p.tracks[k/2].inserts[k%2];s.length=get(1);s.clock=get(1);s.direction=get(1);auto seq=get(1);s.sequenced=seq;if(b[4]>=3)s.density=get(1);ok&=s.density<=100;ok&=s.length>=1&&s.length<=16&&s.clock<6&&s.direction<Directions&&seq<2;
   for(auto&step:s.steps){auto enabled=get(1);step.enabled=enabled;ok&=enabled<2;for(int byte=0;byte<16;byte++){auto v=get(1);for(int bit=0;bit<8;bit++)step.locks[byte*8+bit]=(v>>bit)&1;}for(auto&v:step.values){v=get(1);ok&=v<=100;}}
  }
  if(b[4]>=4)for(auto&v:r.bypass){auto stored=get(1);v=stored;ok&=stored<2;}
  if(b[4]>=5)for(auto&s:r.slots){s.complexity=get(1);s.tempo=get(2);ok&=s.complexity<=100&&(s.tempo==0||(s.tempo>=30&&s.tempo<=300));}
- auto crc=rackCrc(b,b.size()-4);auto stored=get(4);if(!ok||at!=b.size()||crc!=stored){error="INVALID FX CONTENT";return false;}r.reset=out.reset+1;out=std::move(r);return true;
+ auto crc=rackCrc(b,b.size()-4);auto stored=get(4);if(!ok||at!=b.size()||crc!=stored){error="INVALID FX RACK CONTENT";return false;}r.reset=out.reset+1;out=std::move(r);return true;
 }
 }
 

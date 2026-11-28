@@ -82,9 +82,11 @@ struct Draw {
   return n?c[randomNext(seed)%n]:FxType::None;
  }
 };
-// The recipe X grows from: CHARACTER when it is on the PATH, else a random one of the PATH's.
+// The recipe X grows from: CHARACTER when it is on the PATH, else a random one of the PATH's
+// (under ANY, ABSTRACT or RHYTHMIC first, even odds, then one of that path's).
 int sceneFor(int character,int path,uint32_t&seed){
  if(lifebloodOnPath(character,path))return character;
+ if(path==PathAny)path=randomNext(seed)%2?PathRhythmic:PathAbstract;
  int c[LifebloodCharacters],n=0;for(int k=1;k<LifebloodCharacters;k++)if(lifebloodOnPath(k,path))c[n++]=k;
  return n?c[randomNext(seed)%n]:CharacterDrift;
 }
@@ -117,7 +119,8 @@ bool allowedEdge(const LifebloodNetwork&n,int a,int b){
 }
 void clampField(LifebloodNode&k){k.x=std::clamp(k.x,.1f,.9f);k.y=std::clamp(k.y,.1f,.9f);}
 }
-const char*lifebloodPathName(int p){return p==PathAbstract?"ABSTRACT":"RHYTHMIC";}
+int lifebloodSettingsFieldCount(int tab){return tab==1?MasterCompFields:tab==2?MasterEqFields:LifebloodSettingsFields;}
+const char*lifebloodPathName(int p){return p==PathAbstract?"ABSTRACT":p==PathRhythmic?"RHYTHMIC":"ANY";}
 const char*lifebloodCharacterName(int c){static const char*n[]={"ANY","DRIFT","GRIT","SPACE","PULSE","BLOOM","CUT","GATE","MAYHEM","INDUSTRIAL"};return n[std::clamp(c,0,LifebloodCharacters-1)];}
 LifebloodFamily lifebloodFamily(FxType t){
  if(auto*n=nativeInfo(t))return LifebloodFamily(std::min<int>(n->family,6));
@@ -169,6 +172,7 @@ LifebloodNetwork blankLifeblood(){LifebloodNetwork n;n.link[LifebloodIn][Lifeblo
 
 void reseedLifebloodNode(LifebloodNetwork&n,int slot,uint32_t&seed,int path){
  if(slot<0||slot>=LifebloodMaxNodes||!n.node[slot].active)return;
+ path=lifebloodPathFor(path,n.character);
  auto&k=n.node[slot];auto type=k.effect.type;
  // A fresh playable draw (shared with the FX appliance), with one parameter in
  // five kept at the effect's own default, so redraws stay near known ground.
@@ -208,9 +212,10 @@ void reseedLifeblood(LifebloodNetwork&n,uint32_t&seed,int path){for(int k=0;k<Li
 LifebloodNetwork growLifeblood(const LifebloodRecipe&recipe,uint32_t&seed,const DeviceSettings&device){
  if(!seed)seed=1;
  LifebloodNetwork n;int character=sceneFor(recipe.character,recipe.path,seed);n.character=uint8_t(character);
- const Scene&scene=Scenes[character];Draw draw{scene,character,device,recipe.path};draw.budget=drawHarshBudget(scene,seed);
+ const int path=lifebloodPathFor(recipe.path,character);
+ const Scene&scene=Scenes[character];Draw draw{scene,character,device,path};draw.budget=drawHarshBudget(scene,seed);
  int maxNodes=std::clamp(int(recipe.maxNodes),3,LifebloodMaxNodes);int total=between(seed,3,maxNodes);
- bool tail=chance(seed,scene.tail*(recipe.path==PathRhythmic?.5f:1.f))&&device.insertEnabled(FxType::Space);
+ bool tail=chance(seed,scene.tail*(path==PathRhythmic?.5f:1.f))&&device.insertEnabled(FxType::Space);
  int vesselNodes=total-(tail?1:0);
  // One to three vessels from IN; each one to three nodes deep.
  int vessels=vesselNodes<=1?1:std::clamp(chance(seed,.3f)?1:chance(seed,.7f)?2:3,(vesselNodes+2)/3,std::min(3,vesselNodes));
@@ -236,7 +241,7 @@ LifebloodNetwork growLifeblood(const LifebloodRecipe&recipe,uint32_t&seed,const 
  }
  int tailVertex=-1;
  if(tail){auto&k=n.node[next];k.active=true;k.effect={FxType::Space,0};k.rank=uint8_t(next+1);k.x=.78f;k.y=.5f+(unit(seed)-.5f)*.16f;draw.take(FxType::Space);tailVertex=2+next;next++;}
- for(int k=0;k<LifebloodMaxNodes;k++)reseedLifebloodNode(n,k,seed,recipe.path);
+ for(int k=0;k<LifebloodMaxNodes;k++)reseedLifebloodNode(n,k,seed,path);
  // Vessel levels after Vascular's roles (lead, body, motion), kept close so every vessel is heard.
  const int level[3]={100,90,80};
  for(int v=0;v<vessels;v++){
@@ -385,6 +390,7 @@ bool Angiogenesis::step(LifebloodNetwork&n,float dt,int growth,int maxNodes,cons
  float rate=6+114*std::clamp(growth,0,100)/100.f;timer+=dt;
  if(timer<60/rate)return changed;timer=0;
  int character=n.character>CharacterAny?n.character:sceneFor(CharacterAny,path,seed);
+ const int route=lifebloodPathFor(path,character);
  int active=0,cost=0,harsh=0;for(int k=0;k<LifebloodMaxNodes;k++)if(n.node[k].active&&!(dormant>>k&1)){active++;cost+=lifebloodCost(n.node[k].effect.type);harsh+=lifebloodHarshness(n.node[k].effect.type);}
  // Inputs take part only while heard; withering nodes not at all.
  auto live=[&](int v){return n.live(v)&&!(lifebloodNodeVertex(v)&&(dormant>>(v-2)&1))&&!(lifebloodInput(v)&&!n.source(v));};
@@ -408,7 +414,7 @@ bool Angiogenesis::step(LifebloodNetwork&n,float dt,int growth,int maxNodes,cons
  auto grow=[&]{
   int slot=-1;for(int k=0;k<LifebloodMaxNodes;k++)if(!n.node[k].active){slot=k;break;}
   if(slot<0||active>=std::clamp(maxNodes,3,LifebloodMaxNodes))return false;
-  Draw draw{Scenes[character],character,device,path};draw.budget=std::max(harsh,drawHarshBudget(Scenes[character],seed));draw.harsh=harsh;draw.cost=cost;
+  Draw draw{Scenes[character],character,device,route};draw.budget=std::max(harsh,drawHarshBudget(Scenes[character],seed));draw.harsh=harsh;draw.cost=cost;
   draw.costLimit=std::min(CostCeiling,startCost+8);
   for(int k=0;k<LifebloodMaxNodes;k++)if(n.node[k].active)draw.used[int(n.node[k].effect.type)]++;
   int host=randomLive(false);if(host==LifebloodOut||host<0||(lifebloodNodeVertex(host)&&n.node[host-2].effect.type==FxType::Space))host=randomSource(n,seed);
@@ -420,7 +426,7 @@ bool Angiogenesis::step(LifebloodNetwork&n,float dt,int growth,int maxNodes,cons
   for(auto&o:n.node)if(o.active&&&o!=&k&&o.rank>r)o.rank++;k.rank=uint8_t(r+.5f);layout(n);
   k.x=n.x(host)+(unit(seed)-.3f)*.16f;k.y=n.y(host)+(unit(seed)-.5f)*.21f;clampField(k);
   float a=unit(seed)*6.2831853f,speed=.014f+unit(seed)*.066f;vx[slot]=speed*std::cos(a);vy[slot]=speed*std::sin(a)*4/3;
-  reseedLifebloodNode(n,slot,seed,path);
+  reseedLifebloodNode(n,slot,seed,route);
   if(!allowedEdge(n,host,2+slot))host=randomSource(n,seed);
   n.link[host][2+slot]=uint8_t(between(seed,70,100));
   int succ[LifebloodVertices],m=0;for(int w=0;w<LifebloodVertices;w++)if(n.link[host][w]&&w!=2+slot&&live(w)&&allowedEdge(n,2+slot,w))succ[m++]=w;
@@ -440,7 +446,7 @@ bool Angiogenesis::step(LifebloodNetwork&n,float dt,int growth,int maxNodes,cons
   case 2:if(!grow())prune();break;
   case 3:if(!grow())rewire();break;
   case 4:if(!prune())rewire();break;
-  default:{int v=randomLive(true);if(v>=0)reseedLifebloodNode(n,v-2,seed,path);}break;
+  default:{int v=randomLive(true);if(v>=0)reseedLifebloodNode(n,v-2,seed,route);}break;
  }
  lifebloodRepairMasked(n,seed,dormant);
  return true;
@@ -498,8 +504,12 @@ bool readNetwork(Reader&r,LifebloodNetwork&n,int version){
 }
 std::string lifebloodPath(const std::string&root,int slot){if(slot<0||slot>=LifebloodSessionSlots)return {};char name[32];snprintf(name,sizeof name,"slot-%02d.amalthea",slot+1);return (std::filesystem::path(root)/name).string();}
 bool saveLifeblood(const LifebloodSession&s,const std::string&path,std::string&error){
- Writer w;w.b={'A','M','L','B',2,0,0,0,0};
+ Writer w;w.b={'A','M','L','B',3,0,0,0,0};
  w.put(s.tempo,2);w.put(s.character,1);w.put(s.maxNodes,1);w.put(s.growth,1);w.put(s.mix,1);w.put(s.seed,4);w.put(uint32_t(s.activeSnapshot+1),1);w.put(s.path,1);
+ // AMLB3: the mastering stage.
+ const auto&m=s.master;
+ for(int v:{int(m.compOn),int(m.compProfile),int(uint8_t(m.threshold)),int(m.ratio),int(m.attack),int(m.release),int(m.knee),int(m.makeup),int(m.sidechain),int(m.mix),int(m.eqOn),int(m.eqProfile)})w.put(uint32_t(v),1);
+ for(auto b:m.band)w.put(uint8_t(b),1);
  writeNetwork(w,s.network);
  for(int i=0;i<LifebloodSnapshots;i++){w.put(s.stored[i],1);if(s.stored[i])writeNetwork(w,s.snapshots[i]);}
  uint32_t c=crc(w.b,9);for(int i=0;i<4;i++)w.b[5+i]=uint8_t(c>>(i*8));
@@ -512,7 +522,7 @@ bool loadLifeblood(LifebloodSession&out,const std::string&path,std::string&error
  std::ifstream f(path,std::ios::binary);if(!f){error="NO LIFEBLOOD SESSION";return false;}
  f.seekg(0,std::ios::end);auto size=f.tellg();if(size<9||size>4000000){error="INVALID LIFEBLOOD SIZE";return false;}f.seekg(0);
  std::vector<uint8_t>b(size);if(!f.read(reinterpret_cast<char*>(b.data()),size)){error="LIFEBLOOD READ FAILED";return false;}
- if(std::string(b.begin(),b.begin()+4)!="AMLB"||b[4]<1||b[4]>2){error="INVALID LIFEBLOOD HEADER";return false;}
+ if(std::string(b.begin(),b.begin()+4)!="AMLB"||b[4]<1||b[4]>3){error="INVALID LIFEBLOOD HEADER";return false;}
  const int version=b[4];
  uint32_t stored=b[5]|b[6]<<8|b[7]<<16|uint32_t(b[8])<<24;if(crc(b,9)!=stored){error="LIFEBLOOD CHECKSUM";return false;}
  Reader r{b,9};LifebloodSession s;
@@ -520,6 +530,12 @@ bool loadLifeblood(LifebloodSession&out,const std::string&path,std::string&error
  if(version>=2)s.path=uint8_t(r.get(1));
  else s.path=lifebloodRhythmic(s.character)?PathRhythmic:PathAbstract;   // AMLB1: the path its CHARACTER implies
  r.ok&=s.tempo>=30&&s.tempo<=300&&s.character<LifebloodCharacters&&s.maxNodes>=3&&s.maxNodes<=LifebloodMaxNodes&&s.growth<=100&&s.mix<=100&&s.activeSnapshot<LifebloodSnapshots&&s.path<LifebloodPaths;
+ if(version>=3){
+  auto&m=s.master;auto g=[&]{return uint8_t(r.get(1));};
+  m.compOn=g();m.compProfile=g();m.threshold=int8_t(g());m.ratio=g();m.attack=g();m.release=g();m.knee=g();m.makeup=g();m.sidechain=g();m.mix=g();m.eqOn=g();m.eqProfile=g();
+  for(auto&b:m.band)b=int8_t(g());
+  r.ok&=masterValid(m);
+ }
  if(r.ok)r.ok=readNetwork(r,s.network,version);
  for(int i=0;i<LifebloodSnapshots&&r.ok;i++){s.stored[i]=r.get(1);if(s.stored[i])r.ok=readNetwork(r,s.snapshots[i],version);}
  if(!r.ok||r.at!=b.size()){error="INVALID LIFEBLOOD CONTENT";return false;}

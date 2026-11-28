@@ -84,7 +84,10 @@ int main(int argc,char**argv){
  // PATH: every recipe a path grows belongs to it; RHYTHMIC keeps every effect at least 72% wet.
  for(int path=0;path<LifebloodPaths;path++)for(uint32_t i=1;i<300;i++){uint32_t seed=i*40503u+path;auto n=growLifeblood({CharacterAny,7,uint8_t(path)},seed,device);
   check(lifebloodOnPath(n.character,path),"ANY grows a recipe of the chosen PATH");
-  if(path==PathRhythmic)for(auto&k:n.node)if(k.active&&k.effect.type!=FxType::Flanger&&k.effect.type!=FxType::Phaser)check(k.effect.value>=72,"RHYTHMIC effects are clearly wet");}
+  if(lifebloodPathFor(path,n.character)==PathRhythmic)for(auto&k:n.node)if(k.active&&k.effect.type!=FxType::Flanger&&k.effect.type!=FxType::Phaser)check(k.effect.value>=72,"RHYTHMIC effects are clearly wet");}
+ {bool rhythmic=false,abstract=false;for(uint32_t i=1;i<200;i++){uint32_t seed=i*92821u;auto n=growLifeblood({CharacterAny,7,PathAny},seed,device);(lifebloodRhythmic(n.character)?rhythmic:abstract)=true;}
+  check(rhythmic&&abstract,"PATH ANY grows both ABSTRACT and RHYTHMIC recipes");
+  check(LifebloodSession{}.path==PathAny&&std::string(lifebloodPathName(PathAny))=="ANY","sessions start on PATH ANY");}
  // FM1 tracks: vessels start only from heard tracks; every heard track is routed somewhere.
  for(uint32_t i=1;i<400;i++){uint32_t seed=i*7717u;int inputs=i%2?6:3;uint8_t heard=uint8_t((i*37)%((1u<<inputs)-1)+1);
   auto n=growLifeblood({CharacterAny,7,uint8_t(i%2),uint8_t(inputs),heard},seed,device);
@@ -157,7 +160,7 @@ int main(int argc,char**argv){
   e.action(Action::LoadSession);check(e.lbSessionRequest==1,"tap requests a session load");e.lbSessionRequest=0;
   e.action(Action::Enter);check(e.page==Page::LifebloodSettings,"Enter opens session settings");
   for(int f=0;f<LifebloodSettingsFields;f++){e.action(Action::Left);e.action(Action::Down);}
-  check(s.tempo==119&&s.path==PathAbstract&&s.character==CharacterBloom&&s.maxNodes==5&&s.growth==39&&s.mix==99,"each setting adjusts; CHARACTER stays on the PATH");
+  check(s.tempo==119&&s.path==PathRhythmic&&s.character==CharacterIndustrial&&s.maxNodes==5&&s.growth==39&&s.mix==49,"each setting adjusts; CHARACTER stays on the PATH");
   e.lbActiveSession=2;e.action(Action::Cancel);e.action(Action::Patterns);e.action(Action::Right);e.action(Action::SavePattern);check(e.lbSessionRequest==3,"with a session loaded, a stored snapshot is persisted");
   e.action(Action::Play);check(e.lbBypass,"Play bypasses");e.action(Action::Play);check(!e.lbBypass,"Play restores the network");
   e.leaveAppliance();check(e.page==Page::Appliances&&!e.lifeblood,"exit discards the workspace");
@@ -168,7 +171,7 @@ int main(int argc,char**argv){
   float peak=0;run(audio,200,220,&peak);check(peak>.25f&&peak<.32f,"blank network passes the input dry");
   for(int round=0;round<8;round++){uint32_t seed=round*1013+7;auto n=growLifeblood({uint8_t(1+round%5),7,pathOf(uint8_t(1+round%5))},seed,device);n.generation=2+round;
    while(!audio.submit(n,120,100,false,device))run(audio,1,220);
-   double energy=0;check(run(audio,180,330,&peak,&energy)>=0,"network output is finite");check(peak<=.961f,"output stays under the limiter");check(energy>1,"a network passes sound");}
+   double energy=0;check(run(audio,180,330,&peak,&energy)>=0,"network output is finite");check(peak<=.978f,"output stays under the limiter");check(energy>1,"a network passes sound");}
   {uint32_t seed=4242;auto n=growLifeblood({CharacterDrift,6,pathOf(CharacterDrift)},seed,device);n.generation=50;Angiogenesis g;g.active=true;g.start(n);
    for(int i=0;i<30*40;i++){if(g.step(n,1/30.f,100,6,device))while(!audio.submit(n,120,100,false,device))run(audio,1,220);run(audio,6,180+i%40);}
    check(run(audio,20,200,&peak)>=0,"forty seconds of angiogenesis stay finite");}
@@ -192,6 +195,56 @@ int main(int argc,char**argv){
   stats.usbPan[0]=0;auto [l1,r1]=balance(60);check(l1>1&&r1<l1*1e-4,"track 1 panned hard left on the FM1 stays left");
   stats.usbPan[0]=127;auto [l2,r2]=balance(60);check(r2>1&&l2<r2*1e-4,"and hard right stays right");
   stats.usbPan[0]=64;auto [l3,r3]=balance(60);check(std::fabs(10*std::log10(l3/r3))<.1,"CC 10 64 is the centre");}
+ // Bypassed, LIFEBLOOD passes the FM1's tracks as they are: with the FM1's clock 100 ppm fast,
+ // a 15 kHz tone keeps its level at every read position (linear interpolation swept it by
+ // up to 6 dB), at the FM1's own mix level (0.707 at the centre), untouched by the limiter.
+ {AudioStats stats;FxAudio audio(stats);stats.usbState=1;stats.usbChannels=6;
+  auto n=blankLifeblood();n.inputs=6;n.generation=1;audio.submit(n,120,100,true,device);audio.activate(true);
+  std::vector<float> input;float out[512];double phase=0,fed=0,want=0;std::vector<float> left;
+  for(int b=0;b<44100*5/256;b++){want+=256*1.0001;int frames=int(want-fed);fed+=frames;input.assign(size_t(frames)*12,0.f);
+   for(int i=0;i<frames;i++){float v=.4f*float(std::sin(phase));phase+=2*M_PI*15000/(44100*1.0001);input[size_t(i)*12]=input[size_t(i)*12+1]=v;}
+   audio.feed(input.data(),frames,6,44100);audio.render(out,256);for(int i=0;i<256;i++)left.push_back(out[i*2]);}
+  float lo=1e9,hi=0;for(size_t a=44100;a+441<=left.size();a+=441){float p=0;for(size_t i=a;i<a+441;i++)p=std::max(p,std::abs(left[i]));lo=std::min(lo,p);hi=std::max(hi,p);}
+  check(20*std::log10(hi/lo)<.2f,"a 15 kHz tone keeps its level while the clocks drift (no moving low-pass)");
+  check(std::fabs(20*std::log10(hi/(.4f*.70710678f)))<.1f,"bypassed tracks sit at the FM1's own mix level");}
+ // The output limiter is transparent below its ceiling and never jumps its gain on a peak.
+ {AudioStats stats;FxAudio audio(stats);stats.usbState=4;auto n=blankLifeblood();n.generation=1;audio.submit(n,120,100,true,device);audio.activate(true);
+  float input[256*12]{},out[512];double ein=0,eout=0;float peak=0,step=0,last=0;
+  for(int b=0;b<400;b++){float amp=b<200?.5f:1.8f;   // (the jump reaches the output ~7 blocks later: the input buffer)
+   for(int i=0;i<256;i++){float v=amp*std::sin((b*256+i)*.05f);input[i*2]=input[i*2+1]=v;}
+   audio.feed(input,256,1,44100);audio.render(out,256);
+   for(int i=0;i<256;i++){float v=out[i*2];if(b>=100&&b<190){ein+=.25*.5;eout+=v*v;}if(b>=200)peak=std::max(peak,std::abs(v));if(b>=215)step=std::max(step,std::abs(v-last));last=v;}}
+  check(std::fabs(10*std::log10(eout/ein))<.01,"below its ceiling the limiter leaves the level alone");
+  check(peak<=.978f&&step<.07f,"a hot input is held under the ceiling without gain jumps");}
+ // The mirrored output stage: BIGORNA's own reverb (its fx.c) after the network, from its state.
+ // Bypassed, track 1 with a full reverb send leaves a tail when its burst stops; with no state, none.
+ {auto sysex=[](FxAudio&a,std::vector<uint8_t> m){for(auto b:m)a.midi(b,0);};
+  auto fxState=[](int revVol){std::vector<uint8_t> m{0xF0,0x7D,0x46,0x42,1,1};
+   for(int v:{40,30,10,100,0,30,0, 31,0,64,50,0,100,0,0, 8,80,90,80,10,110,0, 107,107,55,3,16,14,0,0})m.push_back(uint8_t(v));
+   m[6+7+8+6]=uint8_t(revVol);m.push_back(1200>>7);m.push_back(1200&127);m.push_back(0xF7);return m;};   // (only the REVERB returns; COMP MIX 0)
+  auto sends=[](int track,int rev){std::vector<uint8_t> m{0xF0,0x7D,0x46,0x42,2};for(int k=0;k<18;k++){int v=k==track*3+2?rev:0;m.push_back(uint8_t(v>>7));m.push_back(uint8_t(v&127));}m.push_back(0xF7);return m;};
+  auto tail=[&](bool state,int rev,int blocksAfter=60){AudioStats stats;FxAudio audio(stats);stats.usbState=1;stats.usbChannels=6;
+   auto n=blankLifeblood();n.inputs=6;n.generation=1;audio.submit(n,120,100,true,device);audio.activate(true);
+   float input[256*12],out[512];double after=0;
+   for(int b=0;b<120+blocksAfter;b++){
+    if(state&&b%40==0){sysex(audio,fxState(100));sysex(audio,sends(0,rev));}
+    for(int i=0;i<256;i++)for(int c=0;c<6;c++){float v=c==0&&b>=40&&b<80?.3f*std::sin((b*256+i)*.07f):0;input[(i*6+c)*2]=input[(i*6+c)*2+1]=v;}
+    audio.feed(input,256,6,44100);audio.render(out,256);
+    if(b>=100)for(float v:out)after+=v*v;}   // (the burst left the input buffer by block ~87)
+   return after;};
+  double none=tail(false,0),dry=tail(true,0),wet=tail(true,16383);
+  check(none<1e-6&&dry<1e-6,"no reverb without BIGORNA's state or with no send");
+  check(wet>1e-2,"a full reverb send leaves BIGORNA's tail after the burst, in bypass");}
+ // Stamped with the input position they arrived at, messages wait for the read: a send set now
+ // does not reach the stage until the audio behind it plays (~1500 frames later).
+ {AudioStats stats;FxAudio audio(stats);stats.usbState=1;stats.usbChannels=6;auto n=blankLifeblood();n.inputs=6;n.generation=1;audio.submit(n,120,100,true,device);audio.activate(true);
+  float input[256*12]{},out[512];for(int b=0;b<12;b++){audio.feed(input,256,6,44100);audio.render(out,256);}
+  std::vector<uint8_t> m{0xF0,0x7D,0x46,0x42,1,1};for(int k=0;k<30;k++)m.push_back(64);m.push_back(1200>>7);m.push_back(1200&127);m.push_back(0xF7);for(auto b:m)audio.midi(b,0);
+  audio.feed(input,256,6,44100);audio.render(out,256);bool early=audio.mirroring();
+  for(int b=0;b<8;b++){audio.feed(input,256,6,44100);audio.render(out,256);}
+  check(!early&&audio.mirroring(),"the effects' state applies when the read reaches it, not on arrival");
+  for(int b=0;b<44100*4/256;b++){audio.feed(input,256,6,44100);audio.render(out,256);}
+  check(!audio.mirroring(),"three seconds without BIGORNA's state, the stage is off");}
  // Loudness matching: every insert engaged at 85% keeps the input's level within 2.5 dB.
  for(auto t:selectableEffects()){if(t==FxType::None||t==FxType::Random)continue;
   InsertEffect fx(t==FxType::Space);std::unique_ptr<PortedProcessor> port;int k=portedIndex(t);PortedPointers ptr{};if(k>=0){port=std::make_unique<PortedProcessor>(t);ptr[k]=port.get();fx.attachPorted(ptr);}
@@ -199,11 +252,66 @@ int main(int argc,char**argv){
   for(int blk=0;blk<44100*6/256;blk++){for(int i=0;i<256;i++,f++){r^=r<<13;r^=r>>17;r^=r<<5;float x=.18f*std::sin(f*.0314f)+.08f*std::sin(f*.113f)+((r>>8)/16777216.f-.5f)*.1f;b[2*i]=x;b[2*i+1]=x*.8f;}
    std::copy(b,b+512,in);fx.processBlock(b,256);if(blk>44100*3/256)for(int i=0;i<512;i++){ein+=in[i]*in[i];eout+=b[i]*b[i];}}
   double db=10*std::log10(eout/ein);if(std::fabs(db)>2.5)fprintf(stderr,"%s %+.1f dB\n",fxName(t),db);check(std::fabs(db)<=2.5,"an engaged effect keeps the input's loudness");}
+ // Mastering: COMP and EQ tabs, profiles, persistence and the DSP.
+ {Editor e;e.page=Page::Appliances;e.applianceItem=2;e.action(Action::Enter);auto&s=*e.lifeblood;auto&m=s.master;
+  check(!m.compOn&&!m.eqOn&&m.compProfile==CompGlue&&m.eqProfile==EqFlat,"mastering starts off: GLUE and FLAT ready");
+  e.action(Action::ShiftDown);e.action(Action::ColumnSettings);e.action(Action::ShiftUp);
+  check(e.lbSettingsTab==0,"settings open on GENERAL");
+  e.action(Action::NextTrack);check(e.lbSettingsTab==1&&e.lbSettingsField==0,"F2: COMP");
+  e.action(Action::Right);check(m.compOn&&e.notice=="COMPRESSOR"&&e.noticeDetail=="ON","COMPRESSOR switches on");
+  e.action(Action::Down);e.action(Action::Right);check(m.compProfile==CompPunch&&m.ratio==3&&m.compOn,"PROFILE loads PUNCH and keeps it on");
+  e.action(Action::Down);e.action(Action::Left);check(m.threshold==-19&&m.compProfile==CompCustom,"a hand edit makes the profile CUSTOM");
+  e.action(Action::Up);e.action(Action::Right);check(m.compProfile==CompGlue,"from CUSTOM, RIGHT loads the first profile");
+  for(int i=0;i<MasterCompFields+1;i++)e.action(Action::Up);check(e.lbSettingsField==0,"COMP rows wrap");
+  {int f=e.lbSettingsField;e.action(Action::Up);check(e.lbSettingsField==MasterCompFields-1,"UP from the first row reaches MIX");e.lbSettingsField=f;}
+  e.action(Action::NextTrack);check(e.lbSettingsTab==2&&e.lbSettingsField==0,"F2: EQ");
+  e.action(Action::Right);e.action(Action::Down);e.action(Action::Right);check(m.eqOn&&m.eqProfile==EqIndustrial&&m.band[1]==3,"EQ on, INDUSTRIAL loaded");
+  e.action(Action::Down);e.action(Action::Down);e.action(Action::Right);check(m.band[1]==4&&m.eqProfile==EqCustom&&e.notice=="62 HZ"&&e.noticeDetail=="+4 DB","a band moves and the profile is CUSTOM");
+  for(int i=0;i<30;i++)e.action(Action::Right);check(m.band[1]==MasterBandRange,"bands stop at +12 dB");
+  e.action(Action::NextTrack);check(e.lbSettingsTab==0,"F2 wraps to GENERAL");e.action(Action::PrevTrack);check(e.lbSettingsTab==2,"F1 goes back");
+  for(int p=1;p<CompProfiles;p++){LifebloodMaster x;applyCompProfile(x,p);check(masterValid(x)&&x.compProfile==p,"every COMP profile is valid");}
+  for(int p=1;p<EqProfiles;p++){LifebloodMaster x;applyEqProfile(x,p);check(masterValid(x)&&x.eqProfile==p,"every EQ profile is valid");}
+  // Persistence: AMLB3 keeps it; the default is what older sessions load with.
+  auto dir=std::filesystem::temp_directory_path()/("amalthea-master-"+std::to_string(getpid()));std::string error;auto path=lifebloodPath(dir.string(),1);
+  check(saveLifeblood(s,path,error),"a mastered session saves");LifebloodSession loaded;check(loadLifeblood(loaded,path,error)&&sameMaster(loaded.master,m),"mastering survives a save");
+  {std::ifstream f(path,std::ios::binary);char h[5];f.read(h,5);check(h[4]==3,"sessions are AMLB3");}
+  {std::ifstream f(path,std::ios::binary);std::vector<uint8_t> b((std::istreambuf_iterator<char>(f)),{});
+   // Rewrite as AMLB2: drop the 22 mastering bytes after PATH.
+   b.erase(b.begin()+9+12,b.begin()+9+12+22);b[4]=2;uint32_t c=~0u;for(size_t i=9;i<b.size();i++){c^=b[i];for(int j=0;j<8;j++)c=(c>>1)^(0xedb88320u&uint32_t(-int(c&1)));}c=~c;for(int i=0;i<4;i++)b[5+i]=uint8_t(c>>(i*8));
+   auto old=lifebloodPath(dir.string(),2);{std::ofstream o(old,std::ios::binary);o.write((const char*)b.data(),b.size());}
+   LifebloodSession o;check(loadLifeblood(o,old,error)&&sameMaster(o.master,LifebloodMaster{})&&o.tempo==s.tempo,"an AMLB2 session loads with mastering off");}
+  std::filesystem::remove_all(dir);}
+ {auto sine=[](std::vector<float>&x,float hz,float amp){for(size_t i=0;i<x.size()/2;i++)x[i*2]=x[i*2+1]=amp*std::sin(6.2831853f*hz*i/44100);};
+  auto peakTail=[](const std::vector<float>&x){float p=0;for(size_t i=x.size()/2;i<x.size();i++)p=std::max(p,std::abs(x[i]));return p;};
+  auto db=[](float v){return 20*std::log10(v);};
+  auto through=[&](const LifebloodMaster&m,float hz,float amp){LifebloodMasterDsp d;d.set(m);d.reset();std::vector<float>x(44100*2);sine(x,hz,amp);for(size_t at=0;at<x.size()/2;at+=256)d.process(x.data()+at*2,int(std::min<size_t>(256,x.size()/2-at)));return x;};
+  {LifebloodMaster m;std::vector<float>x(4096*2);sine(x,440,.5f);auto y=x;LifebloodMasterDsp d;d.set(m);d.process(y.data(),4096);check(x==y,"mastering off is bit-exact");
+   m.eqOn=1;m.compOn=0;LifebloodMasterDsp f;f.set(m);f.reset();y=x;f.process(y.data(),4096);check(x==y,"a FLAT EQ is bit-exact");}
+  {LifebloodMaster m;m.eqOn=1;m.band[5]=6;float g=db(peakTail(through(m,1000,.25f))/.25f),off=db(peakTail(through(m,100,.25f))/.25f);
+   check(std::abs(g-6)<.3f,"1 kHz +6 dB lifts 1 kHz by 6 dB");check(std::abs(off)<.3f,"and leaves 100 Hz alone");}
+  {LifebloodMaster m;m.eqOn=1;m.band[9]=6;check(db(peakTail(through(m,19000,.25f))/.25f)>4.5f&&std::abs(db(peakTail(through(m,500,.25f))/.25f))<.2f,"the 16 kHz shelf lifts the top only");
+   m.band[9]=0;m.band[0]=-12;check(db(peakTail(through(m,20,.25f))/.25f)<-8&&std::abs(db(peakTail(through(m,1000,.25f))/.25f))<.2f,"the 31 Hz shelf cuts rumble only");}
+  {LifebloodMaster m;m.compOn=1;m.threshold=-20;m.ratio=3;m.knee=0;m.attack=0;m.release=2;m.makeup=1;m.sidechain=0;m.mix=100;
+   float out=db(peakTail(through(m,1000,.5f)));check(std::abs(out-(-20+(-6.02f+20)/4))<.6f,"4:1 above -20 dB: the static curve holds");
+   check(std::abs(db(peakTail(through(m,1000,.05f)))-db(.05f))<.1f,"below the threshold: untouched");
+   LifebloodMasterDsp d;d.set(m);d.reset();std::vector<float>x(44100*2);sine(x,1000,.5f);d.process(x.data(),44100);check(d.reduction()>9&&d.reduction()<12,"the meter reads the reduction");
+   m.mix=0;check(std::abs(db(peakTail(through(m,1000,.5f)))-db(.5f))<.05f,"MIX 0 is the dry signal");
+   m.mix=100;m.makeup=0;check(db(peakTail(through(m,1000,.5f)))>out+4,"AUTO makeup restores level");
+   m.makeup=1;m.sidechain=5;check(db(peakTail(through(m,50,.5f)))>out+3,"the sidechain filter lets the sub through uncompressed");}
+  {AudioStats st;FxAudio a(st);st.usbState=4;auto blank=blankLifeblood();blank.generation=1;LifebloodMaster m;m.compOn=1;m.threshold=-30;m.ratio=7;m.knee=0;m.makeup=1;m.attack=0;
+   check(a.submit(blank,120,100,false,device,m),"a network with mastering is accepted");a.activate(true);float peak=0;run(a,200,220,&peak);
+   check(peak<.12f&&st.lifebloodReduction.load()>5,"the mastering compressor works on LIFEBLOOD's output");}
+  {uint32_t seed=9;for(int p=1;p<CompProfiles;p++)for(int q=1;q<EqProfiles;q++){LifebloodMaster m;applyCompProfile(m,p);applyEqProfile(m,q);m.compOn=m.eqOn=1;
+    LifebloodMasterDsp d;d.set(m);d.reset();std::vector<float>x(8192*2);for(auto&v:x)v=((randomNext(seed)>>8)*(1.f/8388608.f)-1)*1.5f;d.process(x.data(),8192);
+    bool finite=true;float peak=0;for(auto v:x){finite&=std::isfinite(v);peak=std::max(peak,std::abs(v));}check(finite&&peak<16,"every profile pair stays finite on hot noise");}}
+ }
  // Every screen renders opaque at both sizes.
  {AudioStats stats;Editor e;e.applianceItem=2;e.page=Page::Appliances;
-  for(int width:{640,1024})for(int view=0;view<6;view++){
+  for(int width:{640,1024})for(int view=0;view<8;view++){
    Editor v;v.page=Page::Appliances;v.applianceItem=2;if(view){v.action(Action::Enter);v.action(Action::RandomizerOptions);v.lbClock=view*.7f;}
-   if(view==2){v.action(Action::NextTrack);v.action(Action::Enter);}if(view==3)v.action(Action::Patterns);if(view==4)v.action(Action::Session);if(view==5){v.action(Action::ShiftDown);v.action(Action::ColumnSettings);v.action(Action::ShiftUp);}
+   if(view==2){v.action(Action::NextTrack);v.action(Action::Enter);}if(view==3)v.action(Action::Patterns);if(view==4)v.action(Action::Session);if(view>=5){v.action(Action::ShiftDown);v.action(Action::ColumnSettings);v.action(Action::ShiftUp);}
+   if(view>=6){v.action(Action::NextTrack);v.action(Action::Right);v.action(Action::Down);v.action(Action::Right);}   // COMP on, PUNCH
+   if(view==7){v.action(Action::NextTrack);v.action(Action::Right);v.action(Action::Down);v.action(Action::Right);v.action(Action::Down);v.action(Action::Down);v.action(Action::Down);}   // EQ on, INDUSTRIAL, 125 Hz
    if(view!=1)v.notice.clear();
    if(view==3){v.notice.clear();v.volumeBanner=true;}
    Canvas canvas(width,width*3/4);drawUI(canvas,v,stats);for(auto pixel:canvas.pixels)check(pixel>>24==255,"LIFEBLOOD screens are opaque");

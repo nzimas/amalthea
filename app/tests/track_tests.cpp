@@ -135,6 +135,37 @@ int main() {
     require(std::string(fxName(FxType::Random))=="RANDOM"&&fxText({FxType::Random,50}).rfind("RN",0)==0,"RANDOM is named in the FX column");
   }
   {
+    // FX RANDOM: each time the step plays, the chosen effect takes newly drawn parameters at the
+    // step's own mix; a fixed step keeps the track's parameters; mix 0 still leaves the track dry.
+    auto stepEnergies=[&](bool randomFx,uint8_t mix){Project pr=blankProject();pr.master.amount[9]=0;pr.master.busMix.fill(0);auto &t=pr.tracks[0];t.instrument=0;pr.patches[0]={0,0};
+      for(int r=0;r<16;r++){t.steps[r].note=48;t.steps[r].fx[0]={FxType::Filter,mix};t.steps[r].fx[0].random=randomFx;}
+      Audio a(64);a.submit(pr,true);std::vector<float> out(5512*16*2);a.render(out.data(),5512*16);
+      std::vector<double> e;for(int k=2;k<15;k++){double x=0;for(int i=k*5512+300;i<k*5512+4000;i++)x+=out[2*i]*out[2*i]+out[2*i+1]*out[2*i+1];e.push_back(x);}
+      for(float v:out)require(std::isfinite(v)&&std::abs(v)<=.951f,"RANDOM FX output finite and bounded");
+      return e;};
+    auto spread=[](const std::vector<double>&e){auto [lo,hi]=std::minmax_element(e.begin(),e.end());return *hi/std::max(1e-12,*lo);};
+    auto fixed=stepEnergies(false,100),drawn=stepEnergies(true,100),dryFixed=stepEnergies(false,0),dryDrawn=stepEnergies(true,0);
+    // (The instrument has its own motion, so each drawn step is measured against the fixed one.)
+    std::vector<double> ratio;for(size_t k=0;k<fixed.size();k++)ratio.push_back(drawn[k]/std::max(1e-12,fixed[k]));
+    require(spread(ratio)>2,"a RANDOM FX step sounds different on its repeats");
+    for(size_t k=1;k<ratio.size();k++)require(std::abs(ratio[k]-ratio[k-1])>.01*std::max(ratio[k],ratio[k-1]),"a RANDOM FX step never repeats the previous draw");
+    double d=0;for(size_t k=0;k<dryFixed.size();k++)d+=std::abs(dryFixed[k]-dryDrawn[k]);
+    require(d<1e-6,"RANDOM at DRY/WET 0 leaves the track dry");
+    Project lp=blankProject();lp.tracks[3].steps[9].fx[1]={FxType::Filter,40};lp.tracks[3].steps[9].fx[1].random=true;
+    lp.tracks[3].steps[10].fx[0].random=true;   // (no effect: not stored)
+    Project back;std::string err;
+    require(decodeProject(back,encodeProject(lp),err)&&back.tracks[3].steps[9].fx[1].random&&!back.tracks[3].steps[9].fx[0].random&&!back.tracks[3].steps[10].fx[0].random&&!back.tracks[0].steps[0].fx[0].random,"RANDOM FX cells survive save/load");
+    // Step editor: FX has three tabs; RANDOM toggles YES/NO and commits with the step.
+    Editor ed;ed.project=blankProject();ed.column=2;ed.action(Action::Enter);ed.action(Action::Up);
+    require(ed.eventTabCount()==3,"FX step editor has DRY/WET, LENGTH, RANDOM");
+    for(int k=0;k<2;k++)ed.action(Action::NextTrack);
+    require(ed.randomTab()&&!ed.pending.fx[0].random,"RANDOM tab opens on NO");
+    ed.action(Action::Up);require(ed.pending.fx[0].random,"UP sets RANDOM to YES");
+    ed.action(Action::Down);require(!ed.pending.fx[0].random,"DOWN sets it to NO");
+    ed.action(Action::Up);ed.action(Action::Enter);
+    require(ed.project.tracks[0].steps[0].fx[0].random&&ed.project.tracks[0].steps[0].fx[0].type!=FxType::None,"RANDOM commits with the step");
+  }
+  {
     // NOTE LENGTH: a held note sounds for its steps; lengths survive save/load.
     auto held=[&](uint8_t length){Project pr=blankProject();pr.master.amount[9]=0;auto &t=pr.tracks[0];t.instrument=0;pr.patches[0]={0,0};
       t.steps[0].note=48;t.steps[0].length=length;Audio a(64);a.submit(pr,true);std::vector<float> out(5512*6*2);a.render(out.data(),5512*6);
